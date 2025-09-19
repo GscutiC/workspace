@@ -1,0 +1,378 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================
+// USER & ORGANIZATION MODELS
+// ================================
+
+model User {
+  id            String   @id @default(cuid())
+  clerkId       String   @unique @map("clerk_id")
+  email         String   @unique
+  firstName     String?  @map("first_name")
+  lastName      String?  @map("last_name")
+  avatarUrl     String?  @map("avatar_url")
+  phone         String?
+  address       String?
+
+  // Organization relationship
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  // Gamification stats
+  totalPoints   Int @default(0) @map("total_points")
+  level         Int @default(1)
+  streak        Int @default(0)
+  lastActiveAt  DateTime? @map("last_active_at")
+
+  // Preferences JSON
+  preferences   Json?
+
+  // Relations
+  sentMessages     Message[] @relation("MessageSender")
+  sessions         Session[]
+  achievements     UserAchievement[]
+  createdSpaces    Space[] @relation("SpaceCreator")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([clerkId])
+  @@index([organizationId])
+  @@index([email])
+  @@map("users")
+}
+
+model Organization {
+  id          String @id @default(cuid())
+  name        String
+  slug        String @unique
+  description String?
+  logoUrl     String? @map("logo_url")
+
+  // Subscription
+  plan        SubscriptionPlan @default(FREE)
+  planExpiresAt DateTime? @map("plan_expires_at")
+
+  // Settings JSON
+  settings    Json?
+
+  // Limits based on plan
+  maxUsers    Int @default(10) @map("max_users")
+  maxSpaces   Int @default(3) @map("max_spaces")
+  maxStorage  Int @default(1024) @map("max_storage") // MB
+
+  // Owner information
+  ownerId     String? @map("owner_id")
+
+  // Relations
+  users       User[]
+  spaces      Space[]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([slug])
+  @@index([ownerId])
+  @@map("organizations")
+}
+
+// ================================
+// VIRTUAL OFFICE MODELS
+// ================================
+
+model Space {
+  id             String @id @default(cuid())
+  name           String
+  description    String?
+
+  // 2D Layout JSON - contains map configuration, objects, etc.
+  layout         Json
+
+  // Background and theme
+  backgroundUrl  String? @map("background_url")
+  theme          SpaceTheme @default(MODERN)
+
+  // Configuration
+  isActive       Boolean @default(true) @map("is_active")
+  isPublic       Boolean @default(true) @map("is_public")
+  maxUsers       Int @default(50) @map("max_users")
+  requireInvite  Boolean @default(false) @map("require_invite")
+
+  // Creator and organization
+  creatorId      String @map("creator_id")
+  creator        User @relation("SpaceCreator", fields: [creatorId], references: [id])
+
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Relations
+  rooms          Room[]
+  sessions       Session[]
+  invites        SpaceInvite[]
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@index([creatorId])
+  @@index([isPublic])
+  @@map("spaces")
+}
+
+model Room {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  type         RoomType
+  capacity     Int      @default(8)
+
+  // Privacy settings
+  isPrivate    Boolean @default(false) @map("is_private")
+  password     String?
+  allowGuests  Boolean @default(true) @map("allow_guests")
+
+  // Position and size in space (pixels)
+  x            Float
+  y            Float
+  width        Float
+  height       Float
+  rotation     Float? @default(0)
+
+  // Visual configuration
+  color        String? @default("#3B82F6")
+  icon         String? // Icon name or emoji
+
+  // Room-specific configuration JSON
+  config       Json?
+
+  // Relations
+  spaceId      String @map("space_id")
+  space        Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  messages     Message[]
+  sessions     Session[]
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([spaceId])
+  @@index([type])
+  @@map("rooms")
+}
+
+model SpaceInvite {
+  id        String @id @default(cuid())
+  email     String
+  token     String @unique
+
+  spaceId   String @map("space_id")
+  space     Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  invitedById String @map("invited_by_id")
+
+  isUsed    Boolean @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([spaceId])
+  @@map("space_invites")
+}
+
+// ================================
+// SESSION & ANALYTICS MODELS
+// ================================
+
+model Session {
+  id        String @id @default(cuid())
+
+  // User tracking
+  userId    String @map("user_id")
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Location tracking
+  spaceId   String? @map("space_id")
+  space     Space? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+
+  roomId    String? @map("room_id")
+  room      Room? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  // Position tracking (avatar position in 2D space)
+  x         Float?
+  y         Float?
+
+  // Session status
+  status    SessionStatus @default(ACTIVE)
+
+  // Time tracking
+  startedAt DateTime @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+  duration  Int? // in seconds, calculated when session ends
+
+  // Session metadata JSON
+  metadata  Json?
+
+  // Activity tracking
+  isActive  Boolean @default(true) @map("is_active")
+  lastSeen  DateTime @default(now()) @map("last_seen")
+
+  @@index([userId])
+  @@index([spaceId])
+  @@index([roomId])
+  @@index([startedAt])
+  @@index([status])
+  @@map("sessions")
+}
+
+// ================================
+// GAMIFICATION MODELS
+// ================================
+
+model UserAchievement {
+  id            String @id @default(cuid())
+
+  userId        String @map("user_id")
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type          AchievementType
+  title         String
+  description   String
+  points        Int
+  badgeUrl      String? @map("badge_url")
+
+  // Achievement metadata
+  metadata      Json?
+
+  unlockedAt    DateTime @default(now()) @map("unlocked_at")
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@index([type])
+  @@map("user_achievements")
+}
+
+// ================================
+// COMMUNICATION MODELS
+// ================================
+
+model Message {
+  id        String @id @default(cuid())
+  content   String
+  type      MessageType @default(TEXT)
+
+  // Sender
+  senderId  String @map("sender_id")
+  sender    User @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  // Location (room or direct message)
+  roomId    String? @map("room_id")
+  room      Room? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  // Direct message target
+  targetUserId String? @map("target_user_id")
+
+  // Message data and attachments
+  metadata  Json?
+  attachments Json? // URLs, file info, etc.
+
+  // Message status
+  isEdited  Boolean @default(false) @map("is_edited")
+  isDeleted Boolean @default(false) @map("is_deleted")
+  isPinned  Boolean @default(false) @map("is_pinned")
+
+  // Thread support
+  parentId  String? @map("parent_id")
+  parent    Message? @relation("MessageThread", fields: [parentId], references: [id])
+  replies   Message[] @relation("MessageThread")
+
+  // Reactions JSON array
+  reactions Json?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([senderId])
+  @@index([roomId])
+  @@index([targetUserId])
+  @@index([parentId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+// ================================
+// ENUMS
+// ================================
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum SpaceTheme {
+  MODERN
+  CLASSIC
+  MINIMALIST
+  DARK
+  COLORFUL
+  NATURE
+}
+
+enum RoomType {
+  MEETING
+  FOCUS
+  SOCIAL
+  LOUNGE
+  WORKSPACE
+  PRESENTATION
+  BRAINSTORM
+  PHONE_BOOTH
+}
+
+enum SessionStatus {
+  ACTIVE
+  IDLE
+  AWAY
+  BUSY
+  OFFLINE
+}
+
+enum AchievementType {
+  FIRST_LOGIN
+  DAILY_STREAK_3
+  DAILY_STREAK_7
+  DAILY_STREAK_30
+  MEETING_MASTER
+  SOCIAL_BUTTERFLY
+  FOCUS_CHAMPION
+  EARLY_BIRD
+  NIGHT_OWL
+  ROOM_CREATOR
+  SPACE_EXPLORER
+  MESSAGE_SENDER
+  COLLABORATION_STAR
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+  EMOJI_REACTION
+  VOICE_NOTE
+  SCREEN_SHARE
+  POLL
+  ANNOUNCEMENT
+}
