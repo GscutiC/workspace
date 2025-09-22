@@ -29,8 +29,8 @@ export const MAP_HEIGHT = 50; // tiles
 // Avatar Configuration
 export const AVATAR_CONFIG = {
   size: { width: 32, height: 48 },
-  moveSpeed: 120, // pixels per second
-  animationSpeed: 0.1,
+  moveSpeed: 160, // Increased base speed for better responsiveness
+  animationSpeed: 0.12, // Slightly faster animation
   nameOffset: { x: 0, y: -60 },
   statusOffset: { x: 20, y: -50 },
   chatOffset: { x: 0, y: -80 },
@@ -40,28 +40,75 @@ export const AVATAR_CONFIG = {
 export const ANIMATION_CONFIG = {
   frameSize: { width: 32, height: 48 },
   framesPerDirection: 4,
-  frameDuration: 200, // milliseconds
-  idleFrame: 1, // Frame index for idle state
+  frameDuration: 180, // Slightly faster animation
+  idleFrame: 0, // Frame index for idle state
 };
 
 // Movement Configuration
 export const MOVEMENT_CONFIG = {
-  smoothingFactor: 0.15,
-  pathfindingTolerance: 5, // pixels
-  maxPathLength: 100,
-  diagonalMovement: false,
+  // Smoothing and interpolation
+  smoothingFactor: 0.2, // Increased for more responsive movement
+  interpolationSteps: 8, // Steps for smooth interpolation
+  
+  // Pathfinding
+  pathfindingTolerance: 3, // Reduced for more precision
+  maxPathLength: 150, // Increased for longer paths
+  diagonalMovement: true, // Enable diagonal movement
+  
+  // Speed variations
+  keyboardMoveSpeed: 180, // Faster keyboard movement
+  pathfindingSpeed: 160, // Consistent with base speed
+  minSpeed: 80, // Minimum speed for short distances
+  maxSpeed: 240, // Maximum speed for long distances
+  
+  // Timing
+  movementDuration: {
+    short: 0.3, // < 50 pixels
+    medium: 0.5, // 50-150 pixels  
+    long: 0.8, // > 150 pixels
+  },
+  
+  // Easing
+  defaultEasing: 'avatarMovement', // Use custom easing by default
+  keyboardEasing: 'easeOutQuart', // Smooth keyboard movement
+  
+  // Advanced
+  predictiveMovement: true, // Enable movement prediction
+  collisionPrediction: true, // Predict and avoid collisions
 };
 
 // Input Configuration
 export const INPUT_CONFIG = {
   moveKeys: {
-    up: ['w', 'W', 'ArrowUp'],
-    down: ['s', 'S', 'ArrowDown'],
-    left: ['a', 'A', 'ArrowLeft'],
-    right: ['d', 'D', 'ArrowRight'],
+    up: ['KeyW', 'ArrowUp'],
+    down: ['KeyS', 'ArrowDown'],
+    left: ['KeyA', 'ArrowLeft'],
+    right: ['KeyD', 'ArrowRight'],
   },
+  actionKeys: ['Space', 'Enter', 'KeyE', 'KeyF'],
+  cameraKeys: ['Equal', 'Minus', 'KeyR'],
   keyRepeatDelay: 100, // milliseconds
   mouseClickTolerance: 5, // pixels
+  dragThreshold: 10, // pixels
+  clickCooldown: 100, // milliseconds
+};
+
+// Text Configuration
+export const TEXT_CONFIG = {
+  fontFamily: 'Arial, sans-serif',
+  fontSize: {
+    small: 12,
+    medium: 16,
+    large: 20,
+  },
+  colors: {
+    primary: 0xFFFFFF,
+    secondary: 0xCCCCCC,
+    accent: 0x4F46E5,
+    success: 0x10B981,
+    warning: 0xF59E0B,
+    error: 0xEF4444,
+  },
 };
 
 // Chat Configuration

@@ -255,11 +255,12 @@ export class Viewport {
     const centerX = this.config.worldWidth / 2;
     const centerY = this.config.worldHeight / 2;
 
-    this.worldContainer.scale.set(this.state.zoom);
-    this.worldContainer.position.set(
-      centerX - this.state.x * this.state.zoom,
-      centerY - this.state.y * this.state.zoom
-    );
+    const newScale = this.state.zoom;
+    const newX = centerX - this.state.x * this.state.zoom;
+    const newY = centerY - this.state.y * this.state.zoom;
+
+    this.worldContainer.scale.set(newScale);
+    this.worldContainer.position.set(newX, newY);
   }
 
   /**

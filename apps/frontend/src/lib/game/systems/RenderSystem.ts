@@ -1,8 +1,9 @@
-import { Container, Sprite, Text, Graphics, DisplayObject } from 'pixi.js';
-import type { AvatarData, LayerType, Position } from '@/types/game';
-import { Direction, UserStatus } from '@/types/game';
+import { Container, Graphics, Text, Sprite } from 'pixi.js';
+import type { GameState, AvatarData, Position } from '@/types/game';
+import { Direction, UserStatus, LayerType } from '@/types/game';
 import { AVATAR_CONFIG } from '@/constants/game';
 import { ObjectPool } from './ObjectPool';
+import { AvatarAnimationSystem } from './AvatarAnimationSystem';
 
 /**
  * RenderSystem handles all visual rendering of avatars, effects, and UI elements
@@ -14,6 +15,7 @@ export class RenderSystem {
   private statusIndicators: Map<string, Graphics>;
   private nameLabels: Map<string, Text>;
   private objectPool: ObjectPool;
+  private animationSystem: AvatarAnimationSystem;
   private lastRenderTime: number = 0;
 
   constructor(layers: Map<LayerType, Container>, objectPool: ObjectPool) {
@@ -23,12 +25,13 @@ export class RenderSystem {
     this.chatBubbles = new Map();
     this.statusIndicators = new Map();
     this.nameLabels = new Map();
+    this.animationSystem = new AvatarAnimationSystem();
   }
 
   /**
    * Update render system
    */
-  public update(deltaTime: number, gameState: { avatars: Map<string, unknown>; viewport?: unknown; screenWidth?: number; screenHeight?: number }): void {
+  public update(deltaTime: number, gameState: GameState): void {
     this.lastRenderTime = performance.now();
 
     // Update avatar animations
@@ -45,24 +48,42 @@ export class RenderSystem {
    * Create avatar visual representation
    */
   public createAvatar(avatar: AvatarData): void {
+    console.log(`🎨 Creating avatar: ${avatar.name} (${avatar.id})`);
+    
     const avatarContainer = this.objectPool.getAvatarContainer();
 
-    // Create avatar graphics
-    const avatarGraphics = this.createAvatarSprite(avatar);
-    avatarContainer.addChild(avatarGraphics);
+    // Ensure container is visible and properly configured
+    avatarContainer.visible = true;
+    avatarContainer.alpha = 1;
+    avatarContainer.name = `Avatar_${avatar.id}`;
+    
+    // Create animated avatar sprite
+    const animatedSprite = this.animationSystem.createAnimatedAvatar(avatar);
+    animatedSprite.name = `Sprite_${avatar.id}`;
+    animatedSprite.visible = true;
+    animatedSprite.alpha = 1;
+    avatarContainer.addChild(animatedSprite);
 
     // Create name label
     const nameLabel = this.createNameLabel(avatar.name, avatar.color);
-    nameLabel.y = -AVATAR_CONFIG.size.height - 20;
+    nameLabel.name = `NameLabel_${avatar.id}`;
+    nameLabel.y = AVATAR_CONFIG.nameOffset.y;
+    nameLabel.x = AVATAR_CONFIG.nameOffset.x;
+    nameLabel.visible = true;
+    nameLabel.alpha = 1;
+    nameLabel.zIndex = 1000;
     avatarContainer.addChild(nameLabel);
 
     // Create status indicator
     const statusIndicator = this.createStatusIndicator(avatar.status);
-    statusIndicator.x = AVATAR_CONFIG.size.width - 10;
-    statusIndicator.y = -10;
+    statusIndicator.name = `Status_${avatar.id}`;
+    statusIndicator.x = AVATAR_CONFIG.statusOffset.x;
+    statusIndicator.y = AVATAR_CONFIG.statusOffset.y;
+    statusIndicator.visible = true;
+    statusIndicator.alpha = 1;
     avatarContainer.addChild(statusIndicator);
 
-    // Position avatar
+    // Position avatar container
     avatarContainer.x = avatar.position.x;
     avatarContainer.y = avatar.position.y;
 
@@ -72,9 +93,12 @@ export class RenderSystem {
     this.statusIndicators.set(avatar.id, statusIndicator);
 
     // Add to character layer
-    const characterLayer = this.layers.get(5); // LayerType.CHARACTERS
+    const characterLayer = this.layers.get(LayerType.CHARACTERS);
     if (characterLayer) {
       characterLayer.addChild(avatarContainer);
+      console.log(`✅ Avatar ${avatar.name} added to scene at (${avatar.position.x}, ${avatar.position.y})`);
+    } else {
+      console.error('❌ CHARACTERS layer not found!');
     }
   }
 
@@ -214,18 +238,33 @@ export class RenderSystem {
    * Create name label for avatar
    */
   private createNameLabel(name: string, color: number): Text {
+    console.log('🎨 Creating name label with text:', name);
+    
     const nameLabel = new Text({
       text: name,
       style: {
-        fontSize: 12,
-        fill: color,
-        fontFamily: 'Arial',
-        stroke: { color: 0x000000, width: 1 },
+        fontSize: 14, // Normal size
+        fill: 0xffffff, // White text for visibility
+        fontFamily: 'Arial, sans-serif',
+        fontWeight: 'bold',
+        stroke: { color: 0x000000, width: 2 }, // Black outline
         align: 'center',
+        dropShadow: {
+          color: 0x000000,
+          blur: 3,
+          angle: Math.PI / 6,
+          distance: 2,
+        },
       },
     });
 
     nameLabel.anchor.set(0.5, 1);
+    nameLabel.visible = true;
+    nameLabel.alpha = 1.0;
+    
+    console.log('🎨 Name label created with dimensions:', nameLabel.width, 'x', nameLabel.height);
+    console.log('🎨 Name label text content:', nameLabel.text);
+    
     return nameLabel;
   }
 
@@ -323,7 +362,7 @@ export class RenderSystem {
   /**
    * Update avatar animations
    */
-  private updateAvatarAnimations(deltaTime: number, gameState: { avatars: Map<string, unknown> }): void {
+  private updateAvatarAnimations(deltaTime: number, gameState: GameState): void {
     // Update avatar positions with smooth interpolation
     for (const [userId, avatarContainer] of this.avatarSprites) {
       const avatar = gameState.avatars.get(userId);
@@ -364,7 +403,7 @@ export class RenderSystem {
   /**
    * Check if avatar is currently moving
    */
-  private isAvatarMoving(_avatar: AvatarData, _gameState: { avatars: Map<string, unknown> }): boolean {
+  private isAvatarMoving(_avatar: AvatarData, _gameState: GameState): boolean {
     // This would check movement system state
     return false; // Placeholder
   }
@@ -383,28 +422,26 @@ export class RenderSystem {
   /**
    * Perform frustum culling for performance
    */
-  private performFrustumCulling(gameState: { viewport?: { x: number; y: number; zoom: number }; avatars: Map<string, unknown>; screenWidth?: number; screenHeight?: number }): void {
+  private performFrustumCulling(gameState: GameState): void {
     const viewport = gameState.viewport;
     if (!viewport) return;
 
     const visibleBounds = {
       x: viewport.x - 100, // Add margin
       y: viewport.y - 100,
-      width: (gameState.screenWidth || 800) / viewport.zoom + 200,
-      height: (gameState.screenHeight || 600) / viewport.zoom + 200,
+      width: 800 / viewport.zoom + 200, // Use default screen dimensions
+      height: 600 / viewport.zoom + 200,
     };
 
     // Hide/show avatars based on visibility
     for (const [userId, avatarContainer] of this.avatarSprites) {
       const avatar = gameState.avatars.get(userId);
       if (!avatar) continue;
-
+      
       const isVisible = this.isPositionInBounds(avatar.position, visibleBounds);
       avatarContainer.visible = isVisible;
     }
-  }
-
-  /**
+  }  /**
    * Check if position is within bounds
    */
   private isPositionInBounds(position: Position, bounds: { x: number; y: number; width: number; height: number }): boolean {
@@ -420,7 +457,7 @@ export class RenderSystem {
    * Add visual effects (screen shake, fade, etc.)
    */
   public addScreenShake(intensity: number, duration: number): void {
-    const characterLayer = this.layers.get(5); // LayerType.CHARACTERS
+    const characterLayer = this.layers.get(LayerType.CHARACTERS);
     if (!characterLayer) return;
 
     const originalX = characterLayer.x;

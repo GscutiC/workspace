@@ -1,6 +1,7 @@
 import type { GameState, Position, AvatarData, MovementTarget } from '@/types/game';
 import { Direction } from '@/types/game';
 import { AVATAR_CONFIG, MOVEMENT_CONFIG, INPUT_CONFIG } from '@/constants/game';
+import { MovementEasing } from '../utils/MovementEasing';
 import { AStar } from '../pathfinding/AStar';
 import { TileMap } from '../TileMap';
 
@@ -11,6 +12,7 @@ export class MovementSystem {
   private gameState: GameState;
   private tileMap: TileMap;
   private pathfinder: AStar;
+  private movementEasing: MovementEasing;
   private movementTargets: Map<string, MovementTarget>;
   private lastKeyInputTime: Map<string, number>;
 
@@ -18,6 +20,7 @@ export class MovementSystem {
     this.gameState = gameState;
     this.tileMap = tileMap;
     this.pathfinder = new AStar(tileMap.getMapData());
+    this.movementEasing = new MovementEasing();
     this.movementTargets = new Map();
     this.lastKeyInputTime = new Map();
   }
@@ -27,6 +30,12 @@ export class MovementSystem {
    */
   public update(deltaTime: number, gameState: GameState): void {
     this.gameState = gameState;
+
+    // Count moving avatars and only log when there's movement
+    const movingCount = Array.from(this.movementTargets.values()).filter(t => t.isMoving).length;
+    if (movingCount > 0) {
+      console.log('🔄 MovementSystem.update - Moving avatars:', movingCount);
+    }
 
     // Update all moving avatars
     this.gameState.avatars.forEach((avatar) => {
@@ -38,22 +47,37 @@ export class MovementSystem {
    * Move avatar to specific position using pathfinding
    */
   public moveToPosition(userId: string, targetPosition: Position): boolean {
+    console.log('🚀 MovementSystem.moveToPosition called for', userId, 'to', targetPosition);
+    
     const avatar = this.gameState.avatars.get(userId);
-    if (!avatar) return false;
+    if (!avatar) {
+      console.error('❌ Avatar not found in MovementSystem:', userId);
+      return false;
+    }
+
+    console.log('📍 Avatar current position:', avatar.position);
 
     // Check if target position is walkable
-    if (!this.tileMap.isWalkable(targetPosition)) {
+    const isWalkable = this.tileMap.isWalkable(targetPosition);
+    console.log('🚶 Target position walkable:', isWalkable);
+    
+    if (!isWalkable) {
+      console.warn('⚠️ Target position is not walkable:', targetPosition);
       return false;
     }
 
     // Calculate path
     const path = this.pathfinder.findPath(avatar.position, targetPosition);
+    console.log('🛤️ Calculated path:', path);
+    
     if (!path || path.length === 0) {
+      console.warn('⚠️ No path found from', avatar.position, 'to', targetPosition);
       return false;
     }
 
     // Smooth the path
     const smoothedPath = this.pathfinder.smoothPath(path);
+    console.log('✨ Smoothed path:', smoothedPath);
 
     // Set movement target
     const movementTarget: MovementTarget = {
@@ -64,6 +88,8 @@ export class MovementSystem {
     };
 
     this.movementTargets.set(userId, movementTarget);
+    console.log('🎯 Movement target set for', userId);
+    
     return true;
   }
 
@@ -74,50 +100,65 @@ export class MovementSystem {
     const avatar = this.gameState.avatars.get(userId);
     if (!avatar) return;
 
+    // FOCUSED DEBUG: Only log UP movement attempts
+    const isUpKey = INPUT_CONFIG.moveKeys.up.includes(key);
+    if (isUpKey) {
+      console.log('� UP KEY DETECTED:', key, 'for user:', userId);
+      console.log('📍 Current avatar position:', avatar.position);
+    }
+
     // Check for key repeat delay
     const now = Date.now();
     const lastInput = this.lastKeyInputTime.get(userId) || 0;
     if (now - lastInput < INPUT_CONFIG.keyRepeatDelay) {
+      if (isUpKey) console.log('⏰ UP movement blocked - key repeat too soon');
       return;
     }
     this.lastKeyInputTime.set(userId, now);
 
-    // Determine movement direction
+    // Calculate movement step
+    const keyboardSpeed = MOVEMENT_CONFIG.keyboardMoveSpeed; // pixels per second
+    const frameTime = 1 / 60; // Assume 60fps for consistent keyboard movement
+    const movementStep = keyboardSpeed * frameTime; // pixels per frame
+
+    // Determine movement direction and calculate target position
     let direction: Direction | null = null;
-    let deltaX = 0;
-    let deltaY = 0;
+    let targetPosition: Position | null = null;
 
     if (INPUT_CONFIG.moveKeys.up.includes(key)) {
       direction = Direction.UP;
-      deltaY = -AVATAR_CONFIG.moveSpeed;
+      targetPosition = {
+        x: avatar.position.x,
+        y: avatar.position.y - movementStep
+      };
+      console.log('⬆️ UP movement - target:', targetPosition);
     } else if (INPUT_CONFIG.moveKeys.down.includes(key)) {
       direction = Direction.DOWN;
-      deltaY = AVATAR_CONFIG.moveSpeed;
+      targetPosition = {
+        x: avatar.position.x,
+        y: avatar.position.y + movementStep
+      };
     } else if (INPUT_CONFIG.moveKeys.left.includes(key)) {
       direction = Direction.LEFT;
-      deltaX = -AVATAR_CONFIG.moveSpeed;
+      targetPosition = {
+        x: avatar.position.x - movementStep,
+        y: avatar.position.y
+      };
     } else if (INPUT_CONFIG.moveKeys.right.includes(key)) {
       direction = Direction.RIGHT;
-      deltaX = AVATAR_CONFIG.moveSpeed;
+      targetPosition = {
+        x: avatar.position.x + movementStep,
+        y: avatar.position.y
+      };
     }
 
-    if (direction) {
+    if (direction && targetPosition) {
       // Update avatar direction
       avatar.direction = direction;
-
-      // Calculate target position
-      const targetPosition: Position = {
-        x: avatar.position.x + deltaX * 0.1, // Small movement step
-        y: avatar.position.y + deltaY * 0.1,
-      };
-
-      // Check if movement is valid
-      if (this.isValidMove(avatar.position, targetPosition)) {
-        avatar.position = targetPosition;
-
-        // Clear any existing pathfinding movement
-        this.movementTargets.delete(userId);
-      }
+      
+      // Use the same moveToPosition method that works for mouse
+      console.log('🎯 Using moveToPosition for keyboard input:', targetPosition);
+      this.moveToPosition(userId, targetPosition);
     }
   }
 
@@ -132,6 +173,7 @@ export class MovementSystem {
 
     const path = movementTarget.path;
     if (!path || path.length === 0) {
+      console.log('❌ No path available, stopping movement for:', avatar.id);
       this.stopMovement(avatar.id);
       return;
     }
@@ -139,6 +181,7 @@ export class MovementSystem {
     // Get current target waypoint
     const currentWaypoint = path[movementTarget.currentPathIndex];
     if (!currentWaypoint) {
+      console.log('❌ No current waypoint, stopping movement for:', avatar.id);
       this.stopMovement(avatar.id);
       return;
     }
@@ -152,6 +195,7 @@ export class MovementSystem {
 
       // Check if reached final destination
       if (movementTarget.currentPathIndex >= path.length) {
+        console.log('✅ Avatar reached final destination:', avatar.id);
         this.stopMovement(avatar.id);
       }
     }
@@ -179,9 +223,11 @@ export class MovementSystem {
       return { reached: true };
     }
 
-    // Calculate movement speed
-    const moveSpeed = AVATAR_CONFIG.moveSpeed * deltaTime;
-    const moveDistance = Math.min(moveSpeed, distance);
+    // Calculate movement using proper speed formula
+    // Speed is in pixels per second, deltaTime is in seconds
+    const pixelsPerSecond = MOVEMENT_CONFIG.pathfindingSpeed;
+    const maxMoveDistance = pixelsPerSecond * deltaTime; // Convert to pixels per frame
+    const moveDistance = Math.min(maxMoveDistance, distance);
 
     // Normalize direction
     const normalizedX = dx / distance;
@@ -193,8 +239,8 @@ export class MovementSystem {
       y: avatar.position.y + normalizedY * moveDistance,
     };
 
-    // Validate movement
-    if (this.isValidMove(avatar.position, newPosition)) {
+    // Validate movement (pass avatar ID to exclude self-collision)
+    if (this.isValidMove(avatar.position, newPosition, avatar.id)) {
       avatar.position = newPosition;
 
       // Determine direction for animation
@@ -202,6 +248,7 @@ export class MovementSystem {
 
       return { reached: false, direction };
     } else {
+      console.log('❌ Movement blocked for avatar:', avatar.id, 'stopping movement');
       // If movement is blocked, stop
       this.stopMovement(avatar.id);
       return { reached: true };
@@ -232,41 +279,77 @@ export class MovementSystem {
   }
 
   /**
-   * Check if movement is valid (not blocked by obstacles)
+   * Check if movement is valid (not blocked by obstacles) - Public for controller use
    */
-  private isValidMove(from: Position, to: Position): boolean {
+  public isValidMove(from: Position, to: Position, avatarId?: string): boolean {
+    // FOCUSED DEBUG: Only log for UP movements (negative Y delta)
+    const isUpMovement = to.y < from.y;
+    
+    if (isUpMovement) {
+      console.log('🔍 VALIDATING UP MOVEMENT:');
+      console.log('  From:', from);
+      console.log('  To:', to);
+      console.log('  Delta Y:', to.y - from.y);
+    }
+    
     // Check boundaries
     const worldBounds = this.tileMap.getWorldBounds();
+    
     if (to.x < 0 || to.x >= worldBounds.width || to.y < 0 || to.y >= worldBounds.height) {
+      if (isUpMovement) {
+        console.log('❌ UP MOVEMENT BLOCKED: OUT OF BOUNDS');
+        console.log('  Target position:', to);
+        console.log('  World bounds:', worldBounds);
+        console.log('  Y check: to.y=', to.y, '< 0?', to.y < 0);
+      }
       return false;
     }
 
     // Check if destination is walkable
-    if (!this.tileMap.isWalkable(to)) {
+    const isWalkable = this.tileMap.isWalkable(to);
+    if (!isWalkable) {
+      if (isUpMovement) {
+        console.log('❌ UP MOVEMENT BLOCKED: NOT WALKABLE');
+        console.log('  Target position:', to);
+        console.log('  TileMap.isWalkable returned:', isWalkable);
+      }
       return false;
     }
 
-    // Check collision with other avatars
-    if (this.checkAvatarCollision(to)) {
+    // Check collision with other avatars (excluding the moving avatar)
+    const hasCollision = this.checkAvatarCollision(to, avatarId);
+    if (hasCollision) {
+      if (isUpMovement) {
+        console.log('❌ UP MOVEMENT BLOCKED: AVATAR COLLISION');
+        console.log('  Target position:', to);
+      }
       return false;
     }
 
-    // Additional validation can be added here (e.g., restricted areas)
+    if (isUpMovement) {
+      console.log('✅ UP MOVEMENT VALIDATED - all checks passed');
+    }
     return true;
   }
 
   /**
    * Check collision with other avatars
    */
-  private checkAvatarCollision(position: Position): boolean {
+  private checkAvatarCollision(position: Position, excludeAvatarId?: string): boolean {
     const collisionRadius = AVATAR_CONFIG.size.width / 2;
 
     for (const [id, avatar] of this.gameState.avatars) {
+      // Skip the avatar that's moving
+      if (excludeAvatarId && id === excludeAvatarId) {
+        continue;
+      }
+
       const dx = avatar.position.x - position.x;
       const dy = avatar.position.y - position.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < collisionRadius * 2) {
+      if (distance < collisionRadius * 1.5) { // Reduced collision radius for better movement
+        console.log('💥 Collision detected with avatar:', id, 'distance:', distance.toFixed(2));
         return true; // Collision detected
       }
     }

@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import { GameEngine } from '@/lib/game/GameEngine';
+import { useAvatarConfig } from '@/hooks/useAvatarConfig';
 import type { AvatarData } from '@/types/game';
 import { UserStatus } from '@/types/game';
 
@@ -15,23 +18,74 @@ import { UserStatus } from '@/types/game';
  * - Performance optimizations with object pooling and culling
  */
 export function VirtualOffice() {
+  const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameEngineRef = useRef<GameEngine | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Get real user information from Clerk
+  const { user, isLoaded: userLoaded } = useUser();
+  
+  // Get avatar configuration with real-time updates
+  const { config: avatarConfig } = useAvatarConfig();
+
   // Game state for UI
   const [connectedUsers, setConnectedUsers] = useState<AvatarData[]>([]);
-  const [currentUserId] = useState<string>('user-1');
+  const [currentUserId] = useState<string>(() => user?.id || `user-${Date.now()}`);
+
+  /**
+   * Add a real user to the virtual office (would be called via WebSocket)
+   */
+  const addRealUser = useCallback((userData: {
+    id: string;
+    name: string;
+    avatar?: string;
+    color?: number;
+    status?: UserStatus;
+  }) => {
+    if (!gameEngineRef.current) return;
+
+    const gameEngine = gameEngineRef.current;
+    
+    console.log('👤 Adding real user to virtual office:', userData.name);
+    gameEngine.addUser({
+      id: userData.id,
+      name: userData.name,
+      color: userData.color || 0x4F46E5,
+      avatar: userData.avatar || 'default',
+      status: userData.status || UserStatus.AVAILABLE,
+    });
+
+    // Update connected users state
+    setConnectedUsers(gameEngine.getAllAvatars());
+  }, []);
+
+  /**
+   * Remove a user from the virtual office (would be called via WebSocket)
+   */
+  const removeRealUser = useCallback((userId: string) => {
+    if (!gameEngineRef.current) return;
+
+    const gameEngine = gameEngineRef.current;
+    
+    console.log('👤 Removing user from virtual office:', userId);
+    gameEngine.removeUser(userId);
+
+    // Update connected users state
+    setConnectedUsers(gameEngine.getAllAvatars());
+  }, []);
 
   /**
    * Initialize the game engine
    */
   const initializeGame = useCallback(async () => {
-    if (!canvasRef.current || gameEngineRef.current) return;
+    if (!canvasRef.current || gameEngineRef.current || !userLoaded) return;
 
     try {
+      console.log('🎮 Initializing Virtual Office...');
+      
       // Create game engine
       const gameEngine = new GameEngine();
       gameEngineRef.current = gameEngine;
@@ -42,44 +96,49 @@ export function VirtualOffice() {
       // Start the game
       await gameEngine.start();
 
+      // Get player configuration (prioritize saved config, fallback to user data)
+      let playerName = user?.fullName || user?.firstName || 'Usuario';
+      let playerColor = 0x4F46E5;
+      let playerAvatar = 'default';
+      
+      if (avatarConfig) {
+        playerName = avatarConfig.name || playerName;
+        playerColor = avatarConfig.color || playerColor;
+        playerAvatar = avatarConfig.avatar || playerAvatar;
+        console.log('🎨 Using saved avatar configuration');
+      }
+
       // Add initial user (player)
-      gameEngine.addUser({
+      const playerAvatarData = gameEngine.addUser({
         id: currentUserId,
-        name: 'You',
-        color: 0x4F46E5, // Indigo
-        avatar: 'default',
+        name: playerName,
+        color: playerColor,
+        avatar: playerAvatar,
+        status: UserStatus.AVAILABLE,
       });
 
       // Set as current user
       gameEngine.setCurrentUser(currentUserId);
 
-      // Add some demo users
-      const demoUsers = [
-        { id: 'user-2', name: 'Alice', color: 0xEF4444, status: UserStatus.AVAILABLE },
-        { id: 'user-3', name: 'Bob', color: 0x10B981, status: UserStatus.BUSY },
-        { id: 'user-4', name: 'Carol', color: 0xF59E0B, status: UserStatus.AWAY },
-        { id: 'user-5', name: 'David', color: 0x8B5CF6, status: UserStatus.AVAILABLE },
-      ];
-
-      demoUsers.forEach(user => {
-        gameEngine.addUser({
-          id: user.id,
-          name: user.name,
-          color: user.color,
-          avatar: 'default',
-        });
-        gameEngine.updateAvatarStatus(user.id, user.status);
-      });
-
       // Update connected users state
       setConnectedUsers(gameEngine.getAllAvatars());
-      setIsInitialized(true);
 
-      console.log('Virtual Office initialized successfully');
+      setIsInitialized(true);
+      console.log('✅ Virtual Office initialized successfully');
+      
+      // Auto-center on avatar after initialization
+      setTimeout(() => {
+        const avatar = gameEngine.getAvatar(currentUserId);
+        if (avatar) {
+          const viewport = gameEngine.getViewport();
+          viewport.moveTo(avatar.position, true);
+        }
+      }, 500);
+      
     } catch (error) {
-      console.error('Failed to initialize Virtual Office:', error);
+      console.error('❌ Error initializing Virtual Office:', error);
     }
-  }, [currentUserId]);
+  }, [userLoaded, user, avatarConfig, currentUserId]);
 
   /**
    * Handle window resize
@@ -132,6 +191,47 @@ export function VirtualOffice() {
   }, [initializeGame]);
 
   /**
+   * Listen for avatar configuration changes and update current user
+   */
+  useEffect(() => {
+    const handleAvatarConfigChange = (event: CustomEvent) => {
+      const newConfig = event.detail;
+      if (!gameEngineRef.current || !isInitialized) return;
+
+      console.log('🎨 Avatar config changed, updating current user:', newConfig);
+      
+      const gameEngine = gameEngineRef.current;
+      const currentUser = gameEngine.getAvatar(currentUserId);
+      
+      if (currentUser) {
+        // Update the current user's avatar in the game
+        const updatedUser = {
+          ...currentUser,
+          name: newConfig.name || currentUser.name,
+          color: newConfig.color || currentUser.color,
+          avatar: newConfig.avatar || currentUser.avatar
+        };
+        
+        // Remove and re-add user with new configuration
+        gameEngine.removeUser(currentUserId);
+        gameEngine.addUser(updatedUser);
+        gameEngine.setCurrentUser(currentUserId);
+        
+        // Update connected users state
+        setConnectedUsers(gameEngine.getAllAvatars());
+        
+        console.log('✅ Current user avatar updated in real-time');
+      }
+    };
+
+    window.addEventListener('avatarConfigChanged', handleAvatarConfigChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('avatarConfigChanged', handleAvatarConfigChange as EventListener);
+    };
+  }, [currentUserId, isInitialized]);
+
+  /**
    * Cleanup on unmount
    */
   useEffect(() => {
@@ -170,8 +270,53 @@ export function VirtualOffice() {
    */
   const toggleDebug = useCallback(() => {
     if (!gameEngineRef.current) return;
-    gameEngineRef.current.toggleDebugMode();
+
+    const gameEngine = gameEngineRef.current;
+    
+    // Toggle debug mode on tilemap
+    gameEngine.toggleDebugMode();
+    
+    // Get comprehensive debug information
+    const debugInfo = gameEngine.getDebugInfo();
+    console.log('🐛 COMPREHENSIVE DEBUG INFO:');
+    console.log('🐛 Game State:', debugInfo.gameState);
+    console.log('🐛 Layers:', debugInfo.layers);
+    console.log('🐛 Systems:', debugInfo.systems);
+    console.log('🐛 Avatars:', debugInfo.avatars);
+    console.log('🐛 World Container:', debugInfo.worldContainer);
+    console.log('🐛 Character Layer:', debugInfo.characterLayer);
+    
+    // Also log viewport information
+    const viewport = gameEngine.getViewport();
+    const viewportState = viewport.getState();
+    console.log('🐛 Viewport State:', viewportState);
+    
+    // Force a manual check of the character layer
+    const allAvatars = gameEngine.getAllAvatars();
+    console.log('🐛 All avatars from GameEngine:', allAvatars);
+    
+    alert('Debug information logged to console. Open DevTools to see details.');
   }, []);
+
+  /**
+   * Force center camera on current user avatar
+   */
+  const centerOnAvatar = useCallback(() => {
+    if (!gameEngineRef.current || !currentUserId) return;
+
+    const gameEngine = gameEngineRef.current;
+    const avatar = gameEngine.getAvatar(currentUserId);
+    
+    if (avatar) {
+      console.log(`🎯 Centering camera on ${avatar.name} at (${avatar.position.x}, ${avatar.position.y})`);
+      
+      // Center viewport on avatar
+      const viewport = gameEngine.getViewport();
+      viewport.moveTo(avatar.position, true);
+    } else {
+      console.error('❌ No avatar found for current user:', currentUserId);
+    }
+  }, [currentUserId]);
 
   /**
    * Move to specific position (for demo purposes)
@@ -300,6 +445,18 @@ export function VirtualOffice() {
             {/* Controls */}
             <div className="bg-white rounded-lg shadow-lg p-3">
               <div className="flex gap-2">
+                <button
+                  onClick={() => router.push('/virtual-office/lobby')}
+                  className="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"
+                >
+                  Configurar Avatar
+                </button>
+                <button
+                  onClick={centerOnAvatar}
+                  className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                >
+                  Find Avatar
+                </button>
                 <button
                   onClick={toggleDebug}
                   className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"

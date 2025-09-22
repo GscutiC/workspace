@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Texture, DisplayObject } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 import type { TileMap as TileMapType, TileData, Position } from '@/types/game';
 import { TileType, LayerType } from '@/types/game';
 import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, TILE_PROPERTIES } from '@/constants/game';
@@ -12,7 +12,7 @@ export class TileMap {
   private tileContainer: Container;
   private collisionContainer: Container;
   private debugContainer: Container;
-  private tileSprites: Map<string, DisplayObject>;
+  private tileSprites: Map<string, Graphics>;
   private showDebug: boolean = false;
 
   constructor() {
@@ -291,7 +291,21 @@ export class TileMap {
    */
   public isWalkable(worldPos: Position): boolean {
     const tile = this.getTileAtPosition(worldPos);
-    return tile ? tile.walkable : false;
+    const walkable = tile ? tile.walkable : false;
+    
+    // FOCUSED DEBUG: Only log for positions that might be UP movement related
+    if (!walkable && worldPos.y < 100) { // Focusing on top area where UP movement issues occur
+      console.log('🚫 POSITION NOT WALKABLE (likely UP movement):', {
+        worldPos,
+        tile: tile ? { x: tile.x, y: tile.y, type: tile.type, walkable: tile.walkable } : null,
+        tileCoords: {
+          tileX: Math.floor(worldPos.x / TILE_SIZE),
+          tileY: Math.floor(worldPos.y / TILE_SIZE)
+        }
+      });
+    }
+    
+    return walkable;
   }
 
   /**

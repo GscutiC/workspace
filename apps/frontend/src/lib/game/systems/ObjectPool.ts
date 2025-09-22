@@ -1,4 +1,4 @@
-import { Container, Sprite, Text, Graphics } from 'pixi.js';
+import { Container, Graphics, Text, Sprite, Texture } from 'pixi.js';
 
 /**
  * ObjectPool manages reusable game objects for performance optimization
@@ -255,7 +255,7 @@ export class ObjectPool {
     sprite.anchor.set(0, 0);
     sprite.pivot.set(0, 0);
     sprite.tint = 0xFFFFFF;
-    sprite.texture = Sprite.EMPTY.texture;
+    sprite.texture = Texture.EMPTY;
   }
 
   /**

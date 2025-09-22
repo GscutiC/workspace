@@ -228,6 +228,7 @@ export class InputSystem {
       return;
     }
 
+    console.log('🖱️ Mouse click detected at position:', position);
     this.lastClickTime = now;
     this.onMouseClick?.(position);
   }
@@ -255,7 +256,7 @@ export class InputSystem {
    * Handle key down events
    */
   private handleKeyDown(event: KeyboardEvent): void {
-    const key = event.code.toLowerCase();
+    const key = event.code; // Don't lowercase here, we need original codes
 
     // Prevent default for game keys
     if (this.isGameKey(key)) {
@@ -277,7 +278,7 @@ export class InputSystem {
    * Handle key up events
    */
   private handleKeyUp(event: KeyboardEvent): void {
-    const key = event.code.toLowerCase();
+    const key = event.code; // Don't lowercase here
 
     if (this.pressedKeys.has(key)) {
       this.pressedKeys.delete(key);

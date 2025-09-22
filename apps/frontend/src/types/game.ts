@@ -1,4 +1,4 @@
-import type { Application, Container, Sprite } from 'pixi.js';
+import type { Application, Container, Sprite, Graphics } from 'pixi.js';
 
 // Core Game Types
 export interface GameConfig {
@@ -30,11 +30,13 @@ export interface Bounds {
 // Avatar Types
 export interface AvatarData {
   id: string;
-  userId: string;
+  userId?: string;
   name: string;
   position: Position;
   direction: Direction;
   status: UserStatus;
+  color: number;
+  avatar: string;
   lastMessage?: ChatMessage;
 }
 
@@ -48,10 +50,10 @@ export interface AvatarSprite extends Sprite {
 }
 
 export enum Direction {
-  UP = 'up',
-  DOWN = 'down',
-  LEFT = 'left',
-  RIGHT = 'right',
+  UP = 0,
+  DOWN = 1,
+  LEFT = 2,
+  RIGHT = 3,
 }
 
 export enum UserStatus {
@@ -108,7 +110,7 @@ export interface TileData {
   y: number;
   type: TileType;
   walkable: boolean;
-  sprite?: Sprite;
+  sprite?: Graphics;
 }
 
 export enum TileType {

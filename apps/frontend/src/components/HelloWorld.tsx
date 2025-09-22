@@ -3,21 +3,36 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { graphqlClient } from '@/lib/graphql';
 
+// Define types for GraphQL responses
+interface HelloWorldMessage {
+  id: string;
+  content: string;
+  createdAt: string;
+}
+
+interface HelloWorldResponse {
+  helloWorld: HelloWorldMessage;
+}
+
+interface CreateMessageResponse {
+  createHelloMessage: HelloWorldMessage;
+}
+
 const HELLO_WORLD_QUERY = `
   query HelloWorld {
     helloWorld {
       id
-      text
+      content
       createdAt
     }
   }
 `;
 
 const CREATE_MESSAGE_MUTATION = `
-  mutation CreateHelloMessage($text: String) {
-    createHelloMessage(text: $text) {
+  mutation CreateHelloMessage($text: String, $senderId: String) {
+    createHelloMessage(text: $text, senderId: $senderId) {
       id
-      text
+      content
       createdAt
     }
   }
@@ -27,16 +42,19 @@ export default function HelloWorld() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['helloWorld'],
     queryFn: async () => {
-      const { helloWorld } = await graphqlClient.request(HELLO_WORLD_QUERY);
-      return helloWorld;
+      const response = await graphqlClient.request<HelloWorldResponse>(HELLO_WORLD_QUERY);
+      return response.helloWorld;
     },
   });
 
   const mutation = useMutation({
     mutationFn: async (text: string) => {
-      const { createHelloMessage } = await graphqlClient.request(CREATE_MESSAGE_MUTATION, { text });
-      return createHelloMessage;
-    },
+      const response = await graphqlClient.request<CreateMessageResponse>(CREATE_MESSAGE_MUTATION, {
+        text,
+        senderId: 'cmfpueq4t0002uk80mcbanu00' // Use Alice Johnson (demo user)
+      });
+      return response.createHelloMessage;
+    }
   });
 
   if (isLoading) return <div>Cargando...</div>;
@@ -47,7 +65,7 @@ export default function HelloWorld() {
       <h1 className="text-2xl font-bold mb-4">Mensaje del Backend:</h1>
       {data ? (
         <div className="bg-white p-4 rounded-lg shadow">
-          <p className="text-lg">{data.text}</p>
+          <p className="text-lg">{data.content}</p>
           <p className="text-sm text-gray-500">
             Creado el: {new Date(data.createdAt).toLocaleString()}
           </p>
