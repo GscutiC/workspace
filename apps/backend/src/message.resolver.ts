@@ -8,6 +8,7 @@ import {
 } from '@nestjs/graphql';
 import { Message } from './graphql/models';
 import { MessageService } from './message.service';
+import { UserService } from './user.service';
 
 @InputType()
 class CreateMessageInput {
@@ -26,7 +27,10 @@ class CreateMessageInput {
 
 @Resolver(() => Message)
 export class MessageResolver {
-  constructor(private messageService: MessageService) {}
+  constructor(
+    private messageService: MessageService,
+    private userService: UserService,
+  ) {}
 
   @Query(() => Message, { nullable: true })
   async helloWorld(): Promise<Message | null> {
@@ -36,11 +40,23 @@ export class MessageResolver {
   @Mutation(() => Message)
   async createHelloMessage(
     @Args('text', { defaultValue: '¡Hola Mundo!' }) text: string,
-    @Args('senderId') senderId: string,
+    @Args('senderId', { nullable: true }) senderId?: string,
   ): Promise<Message> {
+    let finalSenderId = senderId;
+
+    if (!senderId) {
+      // Use the known demo user ID as default
+      finalSenderId = 'cmfpueq4t0002uk80mcbanu00'; // Alice Johnson (user_demo_1)
+    }
+
+    // Ensure finalSenderId is not undefined
+    if (!finalSenderId) {
+      throw new Error('Sender ID is required');
+    }
+
     return this.messageService.createMessage({
       content: text,
-      senderId,
+      senderId: finalSenderId,
     }) as any;
   }
 

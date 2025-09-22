@@ -29,11 +29,12 @@ export class MessageService {
       data: {
         content: data.content,
         senderId: data.senderId,
-        roomId: data.roomId,
-        targetUserId: data.targetUserId,
         type: data.type || MessageType.TEXT,
-        metadata: data.metadata,
-        parentId: data.parentId,
+        // Only include optional fields if they have values
+        ...(data.roomId && { roomId: data.roomId }),
+        ...(data.targetUserId && { targetUserId: data.targetUserId }),
+        ...(data.metadata && { metadata: data.metadata }),
+        ...(data.parentId && { parentId: data.parentId }),
       },
       include: {
         sender: {
