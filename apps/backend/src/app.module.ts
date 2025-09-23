@@ -10,6 +10,9 @@ import { UserService } from './user.service';
 import { UserResolver } from './user.resolver';
 import { WebhookController } from './webhook.controller';
 import { PrismaService } from './prisma.service';
+import { ParcelService } from './parcel.service';
+import { ParcelController } from './parcel.controller';
+import { ParcelGeneratorService } from './parcel-generator.service';
 
 @Module({
   imports: [
@@ -23,7 +26,7 @@ import { PrismaService } from './prisma.service';
       context: ({ req }) => ({ req }),
     }),
   ],
-  controllers: [AppController, WebhookController],
+  controllers: [AppController, WebhookController, ParcelController],
   providers: [
     AppService,
     PrismaService,
@@ -31,6 +34,8 @@ import { PrismaService } from './prisma.service';
     MessageResolver,
     UserService,
     UserResolver,
+    ParcelService,
+    ParcelGeneratorService,
   ],
 })
 export class AppModule {}

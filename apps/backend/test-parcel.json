@@ -1,0 +1,12 @@
+{
+  "number": 1,
+  "name": "Parcela Test",
+  "x": 0,
+  "y": 0,
+  "width": 32,
+  "height": 32,
+  "parcelType": "RESIDENTIAL",
+  "basePrice": 50000,
+  "organizationId": "org1",
+  "spaceId": "space1"
+}

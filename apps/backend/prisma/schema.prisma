@@ -42,6 +42,7 @@ model User {
   sessions         Session[]
   achievements     UserAchievement[]
   createdSpaces    Space[] @relation("SpaceCreator")
+  ownedParcels     Parcel[] @relation("ParcelOwner")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -77,6 +78,7 @@ model Organization {
   // Relations
   users       User[]
   spaces      Space[]
+  parcels     Parcel[]
 
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -119,6 +121,7 @@ model Space {
   rooms          Room[]
   sessions       Session[]
   invites        SpaceInvite[]
+  parcels        Parcel[]
 
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -375,4 +378,93 @@ enum MessageType {
   SCREEN_SHARE
   POLL
   ANNOUNCEMENT
+}
+
+// ================================
+// PARCEL & MAP MANAGEMENT MODELS
+// ================================
+
+model Parcel {
+  id          String @id @default(cuid())
+  number      Int             // Número único de parcela (1, 2, 3, etc.)
+  name        String?         // Nombre opcional de la parcela
+  description String?
+
+  // Position and dimensions in the map (in tile coordinates)
+  x           Int             // Posición X en el mapa (tiles)
+  y           Int             // Posición Y en el mapa (tiles)
+  width       Int             // Ancho en tiles
+  height      Int             // Alto en tiles
+
+  // Parcel properties
+  parcelType  ParcelType      // Tipo de parcela
+  status      ParcelStatus @default(AVAILABLE)
+  buildingType BuildingType?  // Tipo de edificio construido (si aplica)
+
+  // Economic properties
+  basePrice   Float?          // Precio base de la parcela
+  currentPrice Float?         // Precio actual
+  monthlyTax  Float? @default(0) // Impuesto mensual
+
+  // Ownership
+  ownerId     String? @map("owner_id")
+  owner       User? @relation("ParcelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  // Organization and space relationship
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  spaceId     String @map("space_id")
+  space       Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  // Map configuration metadata
+  mapConfig   String?         // JSON string with map generation config used
+  preset      String?         // Preset name used for generation
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, spaceId, number]) // Parcela única por espacio
+  @@index([ownerId])
+  @@index([organizationId])
+  @@index([spaceId])
+  @@index([status])
+  @@index([parcelType])
+  @@map("parcels")
+}
+
+enum ParcelType {
+  RESIDENTIAL     // Zona residencial
+  COMMERCIAL      // Zona comercial
+  INDUSTRIAL      // Zona industrial
+  MIXED_USE       // Uso mixto
+  PUBLIC_PARK     // Parque público
+  INFRASTRUCTURE  // Infraestructura (calles, servicios)
+  SPECIAL         // Uso especial
+}
+
+enum ParcelStatus {
+  AVAILABLE       // Disponible para compra
+  RESERVED        // Reservada
+  OWNED           // Propiedad privada
+  UNDER_CONSTRUCTION // En construcción
+  DEVELOPED       // Desarrollada
+  ABANDONED       // Abandonada
+  PUBLIC          // Propiedad pública
+}
+
+enum BuildingType {
+  HOUSE           // Casa residencial
+  APARTMENT       // Edificio de apartamentos
+  OFFICE          // Oficina
+  SHOP            // Tienda
+  RESTAURANT      // Restaurante
+  WAREHOUSE       // Almacén
+  FACTORY         // Fábrica
+  SCHOOL          // Escuela
+  HOSPITAL        // Hospital
+  PARK            // Parque
+  PLAZA           // Plaza
+  PARKING         // Estacionamiento
+  CUSTOM          // Construcción personalizada
 }
