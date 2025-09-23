@@ -1,14 +1,15 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import type { TileMap as TileMapType, ExtendedTileData, ObstacleInfo, Position } from '@/types/game';
-import { TileType, TileCategory, LayerType } from '@/types/game';
+import { TileType, TileCategory } from '@/types/game';
 import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, TILE_PROPERTIES } from '@/constants/game';
 import { CityGenerator, type ParcelInfo } from './generators/CityGenerator';
 import { RiverGenerator } from './generators/RiverGenerator';
 import { ParksGenerator } from './generators/ParksGenerator';
 import { UrbanFurnitureGenerator } from './generators/UrbanFurnitureGenerator';
 import { PathfindingIntegration } from './utils/PathfindingIntegration';
-import { DEFAULT_CONFIG, type TerrainConfig } from './config/MapConfig';
+import { DEFAULT_CONFIG } from './config/MapConfig';
 import { MapFactory } from './MapFactory';
+import { ParcelEventManager } from './ParcelEventManager';
 
 /**
  * TileMap manages the 2D grid-based world
@@ -25,6 +26,7 @@ export class TileMap {
   private parcelSprites: Map<string, Container>;
   private showDebug: boolean = false;
   private showParcels: boolean = false;
+  private parcelEventManager: ParcelEventManager;
 
   constructor(mapData: TileMapType, parcels: ParcelInfo[] = []) {
     this.mapData = mapData;
@@ -44,6 +46,25 @@ export class TileMap {
     this.collisionContainer.visible = false;
     this.debugContainer.visible = false;
     this.parcelContainer.visible = false;
+
+    // Initialize optimized parcel event management
+    this.parcelEventManager = new ParcelEventManager(this.parcelContainer, {
+      onParcelHover: (parcel) => {
+        if (parcel) {
+          console.log(`🏗️ Hovering over Parcel ${parcel.number} (${parcel.type})`);
+        }
+      },
+      onParcelClick: (parcel) => {
+        console.log(`🖱️ Clicked on Parcel ${parcel.number}:`, parcel);
+        // Dispatch custom event for external listeners
+        window.dispatchEvent(new CustomEvent('parcelSelected', { detail: parcel }));
+      },
+      onParcelDoubleClick: (parcel) => {
+        console.log(`🖱️🖱️ Double-clicked on Parcel ${parcel.number}:`, parcel);
+        // Dispatch custom event for parcel activation
+        window.dispatchEvent(new CustomEvent('parcelActivated', { detail: parcel }));
+      }
+    });
 
     // Initialize walkableAreas if not provided or empty
     this.initializeWalkableAreas();
@@ -168,6 +189,116 @@ export class TileMap {
   }
 
   /**
+   * Toggle parcel visibility
+   */
+  public toggleParcelVisibility(): void {
+    this.showParcels = !this.showParcels;
+    this.parcelContainer.visible = this.showParcels;
+    
+    if (this.showParcels && this.parcelSprites.size === 0) {
+      this.renderParcelOutlines();
+    }
+    
+    console.log(`📦 Parcel visibility: ${this.showParcels ? 'ON' : 'OFF'}`);
+  }
+
+  /**
+   * Render parcel outlines on the map
+   */
+  public renderParcelOutlines(): void {
+    // Clear existing parcel sprites and event registrations
+    this.clearParcelSprites();
+
+    this.parcels.forEach(parcel => {
+      const parcelSprite = this.createParcelSprite(parcel);
+      const spriteKey = `parcel-${parcel.number}`;
+
+      this.parcelSprites.set(spriteKey, parcelSprite);
+      this.parcelContainer.addChild(parcelSprite);
+
+      // Register parcel with the optimized event manager
+      this.parcelEventManager.registerParcel(parcel, parcelSprite.name);
+    });
+
+    console.log(`🎨 Rendered ${this.parcels.length} parcel outlines with optimized events`);
+  }
+
+  /**
+   * Create a visual sprite for a parcel using optimized rendering
+   */
+  private createParcelSprite(parcel: ParcelInfo): Container {
+    const container = new Container();
+    container.name = `Parcel-${parcel.number}`;
+
+    // Create border graphics with name for event manager - FIXED for Pixi.js v8
+    const border = new Graphics();
+    border.name = 'border';
+    border.lineStyle(2, this.getParcelColor(parcel.type), 1);
+    border.drawRect(parcel.x, parcel.y, parcel.width, parcel.height);
+
+    // Create fill with transparency - FIXED for Pixi.js v8
+    const fill = new Graphics();
+    fill.name = 'fill';
+    fill.beginFill(this.getParcelColor(parcel.type), 0.2);
+    fill.drawRect(parcel.x, parcel.y, parcel.width, parcel.height);
+    fill.endFill();
+
+    // Create parcel number label with name for event manager - FIXED for Pixi.js v8
+    const label = new Text(`P${parcel.number}`, {
+      fontFamily: 'Arial',
+      fontSize: 12,
+      fill: 0xFFFFFF,
+      fontWeight: 'bold'
+    });
+    label.name = 'label';
+
+    // Position label at center of parcel
+    label.x = parcel.x + parcel.width / 2 - label.width / 2;
+    label.y = parcel.y + parcel.height / 2 - label.height / 2;
+
+    // Add components to container in correct order
+    container.addChild(fill);
+    container.addChild(border);
+    container.addChild(label);
+
+    // NOTE: No individual event listeners here!
+    // Events are handled by ParcelEventManager using delegation
+    // This improves performance significantly for many parcels
+
+    return container;
+  }
+
+  /**
+   * Get color for parcel type
+   */
+  private getParcelColor(type: string): number {
+    const colors = {
+      residential: 0x4CAF50,    // Green
+      commercial: 0x2196F3,    // Blue  
+      office: 0xFF9800,        // Orange
+      mixed: 0x9C27B0,         // Purple
+      public: 0x8BC34A,        // Light Green
+      infrastructure: 0x607D8B // Blue Grey
+    };
+    
+    return colors[type as keyof typeof colors] || 0x999999;
+  }
+
+  /**
+   * Clear parcel sprites and event registrations
+   */
+  private clearParcelSprites(): void {
+    this.parcelSprites.forEach((sprite) => {
+      sprite.destroy();
+    });
+    this.parcelSprites.clear();
+    this.parcelContainer.removeChildren();
+
+    // Clear event manager registrations for better performance
+    this.parcelEventManager.clearAllParcels();
+  }
+
+  /**
    * Generate a default urban environment layout with city blocks, wide streets, large parks and a river
    */
   private generateDefaultMap(): TileMapType {
@@ -250,35 +381,59 @@ export class TileMap {
     this.tileContainer.sortableChildren = true;
     this.collisionContainer.sortableChildren = true;
     this.debugContainer.sortableChildren = true;
+    this.parcelContainer.sortableChildren = true;
 
-    // Set layer z-indices
-    this.tileContainer.zIndex = LayerType.FLOOR;
-    this.collisionContainer.zIndex = LayerType.OBJECTS;
-    this.debugContainer.zIndex = LayerType.UI;
+    // Set layer z-indices (keep tiles at low z-index)
+    this.tileContainer.zIndex = 1;
+    this.collisionContainer.zIndex = 2;
+    this.parcelContainer.zIndex = 3;
+    this.debugContainer.zIndex = 10;
   }
 
   /**
-   * Create visual representation of the map
+   * Create visual representation of the tilemap with borders
    */
   public createVisuals(): Container {
     const container = new Container();
-    container.addChild(this.tileContainer);
-    container.addChild(this.collisionContainer);
-    container.addChild(this.parcelContainer);
-    container.addChild(this.debugContainer);
-
+    container.name = 'TileMapVisuals';
+    
+    // Render all tiles
     this.renderTiles();
-    if (this.showDebug) {
-      this.renderDebugInfo();
-    }
-    if (this.showParcels) {
-      this.renderParcels();
-    }
-
+    
+    // Add border around the entire map
+    this.renderMapBorder();
+    
+    container.addChild(this.tileContainer);
+    
     return container;
   }
 
   /**
+   * Render border around the entire map to define boundaries
+   */
+  private renderMapBorder(): void {
+    const border = new Graphics();
+    const borderWidth = 4;
+    const borderColor = 0x333333; // Dark gray border
+    const mapWorldWidth = this.mapData.width * TILE_SIZE;
+    const mapWorldHeight = this.mapData.height * TILE_SIZE;
+    
+    // Draw outer border - FIXED for Pixi.js v8
+    border.lineStyle(borderWidth, borderColor, 1);
+    border.drawRect(-borderWidth/2, -borderWidth/2, mapWorldWidth + borderWidth, mapWorldHeight + borderWidth);
+
+    // Add semi-transparent background to show map area clearly - FIXED for Pixi.js v8
+    const background = new Graphics();
+    background.beginFill(0x87CEEB, 0.1); // Very light blue background
+    background.drawRect(0, 0, mapWorldWidth, mapWorldHeight);
+    background.endFill();
+    
+    // Add background and border to tile container
+    this.tileContainer.addChildAt(background, 0); // Add as first child (behind tiles)
+    this.tileContainer.addChild(border);
+    
+    console.log(`🔲 Map border rendered: ${mapWorldWidth}x${mapWorldHeight} pixels`);
+  }  /**
    * Render all tiles
    */
   private renderTiles(): void {
@@ -321,11 +476,9 @@ export class TileMap {
   }
 
   /**
-   * Create sprite for a tile
+   * Create sprite for a tile - FIXED for Pixi.js v8 API
    */
   private createTileSprite(tile: ExtendedTileData): Graphics {
-    // Create graphics directly instead of converting to sprite
-    // This avoids texture generation issues in Pixi.js v8
     const graphics = new Graphics();
     const properties = TILE_PROPERTIES[tile.type as keyof typeof TILE_PROPERTIES];
 
@@ -334,15 +487,16 @@ export class TileMap {
       return graphics;
     }
 
-    graphics
-      .rect(0, 0, TILE_SIZE, TILE_SIZE)
-      .fill(properties.color);
+    // ✅ FIXED: Use correct Pixi.js v8 API for Graphics
+    graphics.clear();
+    graphics.beginFill(properties.color);
+    graphics.drawRect(0, 0, TILE_SIZE, TILE_SIZE);
+    graphics.endFill();
 
-    // Add border for better visibility
+    // Add border for better visibility with correct v8 API
     if (tile.type !== TileType.FLOOR && tile.type !== TileType.STREET) {
-      graphics
-        .rect(0, 0, TILE_SIZE, TILE_SIZE)
-        .stroke({ width: 1, color: 0x000000 });
+      graphics.lineStyle(1, 0x000000, 1);
+      graphics.drawRect(0, 0, TILE_SIZE, TILE_SIZE);
     }
 
     // Set position
@@ -363,18 +517,24 @@ export class TileMap {
   private renderDebugInfo(): void {
     this.debugContainer.removeChildren();
 
-    // Render collision grid
-    for (let y = 0; y < this.mapData.height; y++) {
-      for (let x = 0; x < this.mapData.width; x++) {
-        if (this.mapData.collisionMap[y][x]) {
-          const graphics = new Graphics();
-          graphics
-            .rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            .stroke({ width: 2, color: 0xFF0000, alpha: 0.5 });
+    // Render collision grid with safety checks
+    if (this.mapData?.collisionMap && Array.isArray(this.mapData.collisionMap)) {
+      for (let y = 0; y < this.mapData.height; y++) {
+        const row = this.mapData.collisionMap[y];
+        if (row && Array.isArray(row)) {
+          for (let x = 0; x < this.mapData.width; x++) {
+            if (row[x]) {
+              const graphics = new Graphics();
+              graphics.lineStyle(2, 0xFF0000, 0.5);
+              graphics.drawRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-          this.debugContainer.addChild(graphics);
+              this.debugContainer.addChild(graphics);
+            }
+          }
         }
       }
+    } else {
+      console.warn('⚠️ Collision map not properly initialized for debug rendering');
     }
   }
 
@@ -854,19 +1014,52 @@ export class TileMap {
    * Get parcel at position
    */
   public getParcelAtPosition(x: number, y: number): ParcelInfo | undefined {
-    return this.parcels.find(parcel => 
+    const foundParcel = this.parcels.find(parcel => 
       x >= parcel.x && x < parcel.x + parcel.width &&
       y >= parcel.y && y < parcel.y + parcel.height
     );
+    
+    return foundParcel;
   }
 
   /**
-   * Clear all parcel sprites
+   * Get the container for tile rendering
    */
-  private clearParcelSprites(): void {
-    this.parcelSprites.forEach(sprite => sprite.destroy());
-    this.parcelSprites.clear();
-    this.parcelContainer.removeChildren();
+  public getTileContainer(): Container {
+    return this.tileContainer;
+  }
+
+  /**
+   * Get the container for collision visualization  
+   */
+  public getCollisionContainer(): Container {
+    return this.collisionContainer;
+  }
+
+  /**
+   * Get the container for debug visualization
+   */
+  public getDebugContainer(): Container {
+    return this.debugContainer;
+  }
+
+  /**
+   * Get the container for parcel visualization
+   */
+  public getParcelContainer(): Container {
+    return this.parcelContainer;
+  }
+
+  /**
+   * Get all containers for adding to the stage
+   */
+  public getAllContainers(): Container[] {
+    return [
+      this.tileContainer,
+      this.collisionContainer, 
+      this.debugContainer,
+      this.parcelContainer
+    ];
   }
 
   /**
@@ -876,6 +1069,10 @@ export class TileMap {
     this.tileSprites.forEach(sprite => sprite.destroy());
     this.tileSprites.clear();
     this.clearParcelSprites();
+
+    // Destroy the optimized event manager
+    this.parcelEventManager.destroy();
+
     this.tileContainer.destroy();
     this.collisionContainer.destroy();
     this.parcelContainer.destroy();

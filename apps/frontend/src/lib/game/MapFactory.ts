@@ -1,12 +1,8 @@
 import type { ExtendedTileData, ObstacleInfo } from '@/types/game';
 import { TileType, TileCategory } from '@/types/game';
 import { MAP_WIDTH, MAP_HEIGHT } from '@/constants/game';
-import { 
-  type TerrainConfig, 
-  DEFAULT_CONFIG, 
-  DOWNTOWN_CONFIG, 
-  SUBURBAN_CONFIG, 
-  INDUSTRIAL_CONFIG,
+import {
+  type TerrainConfig,
   AVAILABLE_PRESETS,
   validateConfig
 } from './config/MapConfig';
@@ -14,7 +10,7 @@ import { CityGenerator, type ParcelInfo } from './generators/CityGenerator';
 import { RiverGenerator } from './generators/RiverGenerator';
 import { ParksGenerator } from './generators/ParksGenerator';
 import { UrbanFurnitureGenerator } from './generators/UrbanFurnitureGenerator';
-import { ParcelLoader } from './ParcelLoader';
+import { NewParcelLoader } from './NewParcelLoader';
 
 /**
  * MapFactory provides a high-level interface for generating complete maps
@@ -36,7 +32,7 @@ export class MapFactory {
 
   /**
    * Generate a complete map using real parcels from the API
-   * This method should be used for the actual game instead of generateMap()
+   * This method loads parcels from the Districts GraphQL system
    */
   public static async generateMapWithRealParcels(
     presetName: string = 'default'
@@ -52,51 +48,49 @@ export class MapFactory {
     // Initialize empty map
     const { tiles, obstacles } = this.initializeMap();
     
-    // Load real parcels from API
+    // Load parcels from District system only
     let parcels: ParcelInfo[];
     try {
-      parcels = await ParcelLoader.loadRealParcels();
+      console.log('🏗️ Loading parcels from District system...');
+      parcels = await NewParcelLoader.loadDistrictParcels();
       
-      // If no parcels loaded, use fallback
       if (parcels.length === 0) {
-        console.warn('⚠️ No parcels loaded from API, using fallback');
-        parcels = ParcelLoader.createFallbackParcels();
+        console.warn('⚠️ No parcels found in district system, creating default layout');
+        parcels = this.createDefaultParcels();
       }
     } catch (error) {
-      console.error('❌ Failed to load parcels, using fallback:', error);
-      parcels = ParcelLoader.createFallbackParcels();
+      console.error('❌ Failed to load district parcels:', error);
+      console.log('🔄 Creating default parcels as fallback');
+      parcels = this.createDefaultParcels();
     }
 
     // Generate map features in order of dependency
-    // 1. Use real parcels and generate city structure around them
-    console.log(`🏗️ Using ${parcels.length} real parcels for map generation`);
+    console.log(`🏗️ Using ${parcels.length} parcels from district system`);
     
-    // Generate basic city structure (streets, buildings) but use real parcels positions
-    // This will create the visual city layout
+    // Generate basic city structure (streets, buildings) around district parcels
     CityGenerator.generateCityBlocksWithRealParcels(tiles, obstacles, config.city, parcels);
     
-    // 2. Parks (green spaces) - these could also be parcels in the future
+    // Add parks (green spaces)
     ParksGenerator.generateLargeParks(tiles, obstacles, config.parks);
     
-    // 3. River (may modify existing tiles)
+    // Add river and water borders
     RiverGenerator.generateRiver(tiles, obstacles, config.river);
+    console.log('🌊 River/water borders added for natural boundaries');
     
-    // 4. Urban furniture (final details)
+    // Add urban furniture (final details)
     UrbanFurnitureGenerator.addUrbanFurniture(tiles, obstacles, config.furniture);
 
-    // Add preset information to parcels for reference
-    if (presetName) {
-      parcels.forEach(parcel => {
-        if (!parcel.preset || parcel.preset === 'fallback') {
-          parcel.preset = presetName;
-        }
-        if (!parcel.configSnapshot) {
-          parcel.configSnapshot = JSON.stringify(config);
-        }
-      });
-    }
+    // Add preset information to parcels
+    parcels.forEach(parcel => {
+      if (!parcel.preset) {
+        parcel.preset = presetName;
+      }
+      if (!parcel.configSnapshot) {
+        parcel.configSnapshot = JSON.stringify(config);
+      }
+    });
 
-    console.log(`✅ Generated map with ${parcels.length} real parcels`);
+    console.log(`✅ Generated map with ${parcels.length} district parcels`);
     return { tiles, obstacles, parcels };
   }
 
@@ -124,8 +118,9 @@ export class MapFactory {
     // 2. Parks (green spaces) - these could also be parcels in the future
     ParksGenerator.generateLargeParks(tiles, obstacles, config.parks);
     
-    // 3. River (may modify existing tiles)
+    // 3. River (may modify existing tiles) - RESTORED: Natural water borders
     RiverGenerator.generateRiver(tiles, obstacles, config.river);
+    console.log('🌊 River/water borders restored for natural boundaries');
     
     // 4. Urban furniture (final details)
     UrbanFurnitureGenerator.addUrbanFurniture(tiles, obstacles, config.furniture);
@@ -221,5 +216,39 @@ export class MapFactory {
       label: preset.label,
       description: this.getPresetDescription(preset.name)
     }));
+  }
+
+  /**
+   * Create default parcels when district system is not available
+   */
+  private static createDefaultParcels(): ParcelInfo[] {
+    const parcels: ParcelInfo[] = [];
+    
+    // Create a simple 4x4 grid of parcels (16 total)
+    const parcelSize = 16;
+    const spacing = 50;
+    
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        const number = row * 4 + col + 1;
+        const x = 20 + col * spacing;
+        const y = 20 + row * spacing;
+        
+        parcels.push({
+          number,
+          x,
+          y,
+          width: parcelSize,
+          height: parcelSize,
+          type: 'residential',
+          districtType: 'residential',
+          buildingType: 'default',
+          preset: 'default'
+        });
+      }
+    }
+    
+    console.log(`🏗️ Created ${parcels.length} default parcels`);
+    return parcels;
   }
 }

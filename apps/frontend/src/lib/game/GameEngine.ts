@@ -11,6 +11,7 @@ import { InputSystem } from './systems/InputSystem';
 import { ObjectPool } from './systems/ObjectPool';
 import { MinimapSystem } from './systems/MinimapSystem';
 import { MovementController } from './controllers/MovementController';
+import type { ParcelInfo } from './generators/CityGenerator';
 
 // Define interfaces for systems
 interface GameSystem {
@@ -35,6 +36,7 @@ export class GameEngine {
   private isRunning: boolean = false;
   private lastFrameTime: number = 0;
   private cullingEnabled: boolean = true;
+  private frameCount: number = 0; // Debug counter
 
   constructor() {
     // Initialize Pixi.js application
@@ -51,35 +53,73 @@ export class GameEngine {
   }
 
   /**
-   * Initialize the game engine with canvas
+   * Initialize the game engine with canvas - IMPROVED with detailed logging
    */
   async init(canvas: HTMLCanvasElement): Promise<void> {
-    // Initialize Pixi.js first
-    await this.initializePixi(canvas);
+    console.log('🎮 GameEngine: Starting initialization...');
+    console.log('📋 Canvas element:', canvas ? 'Available' : 'NOT AVAILABLE');
 
-    // Setup layers after Pixi.js is ready
-    this.setupLayers();
+    try {
+      console.log('🔧 Step 1: Initializing Pixi.js application...');
+      // Initialize Pixi.js first
+      await this.initializePixi(canvas);
+      console.log('✅ Step 1 completed: Pixi.js initialized');
 
-    // Initialize systems after canvas is available (now with real parcels)
-    await this.initializeSystems();
+      console.log('🔧 Step 2: Setting up layers...');
+      // Setup layers after Pixi.js is ready
+      this.setupLayers();
+      console.log('✅ Step 2 completed: Layers setup');
+
+      console.log('🔧 Step 3: Initializing game systems...');
+      // Initialize systems after canvas is available (now with real parcels)
+      await this.initializeSystems();
+      console.log('✅ Step 3 completed: Game systems initialized');
+
+      console.log('✅ GameEngine: Initialization complete');
+    } catch (error) {
+      console.error('❌ GameEngine initialization failed:', error);
+      console.error('❌ Error stack:', error.stack);
+      throw error;
+    }
   }
 
   /**
-   * Initialize Pixi.js application
+   * Initialize Pixi.js application - IMPROVED for robustness
    */
   private async initializePixi(canvas: HTMLCanvasElement): Promise<void> {
-    await this.app.init({
-      canvas,
-      width: GAME_CONFIG.width,
-      height: GAME_CONFIG.height,
-      backgroundColor: GAME_CONFIG.backgroundColor,
-      antialias: GAME_CONFIG.antialias,
-      autoDensity: GAME_CONFIG.autoDensity,
-      resolution: GAME_CONFIG.resolution,
-    });
+    try {
+      console.log('🎮 Initializing Pixi.js v8 application...');
 
-    // Enable sorting for layers
-    this.app.stage.sortableChildren = true;
+      await this.app.init({
+        canvas,
+        width: GAME_CONFIG.width,
+        height: GAME_CONFIG.height,
+        backgroundColor: GAME_CONFIG.backgroundColor,
+        antialias: GAME_CONFIG.antialias,
+        autoDensity: GAME_CONFIG.autoDensity,
+        resolution: GAME_CONFIG.resolution,
+      });
+
+      // ✅ Verify initialization was successful
+      if (!this.app.stage) {
+        throw new Error('Pixi.js stage not initialized properly');
+      }
+
+      if (!this.app.renderer) {
+        throw new Error('Pixi.js renderer not initialized properly');
+      }
+
+      // Enable sorting for layers
+      this.app.stage.sortableChildren = true;
+
+      console.log('✅ Pixi.js v8 initialized successfully');
+      console.log(`📏 Canvas size: ${GAME_CONFIG.width}x${GAME_CONFIG.height}`);
+      console.log(`🎨 Renderer type: ${this.app.renderer.type}`);
+
+    } catch (error) {
+      console.error('❌ Failed to initialize Pixi.js:', error);
+      throw new Error(`Pixi.js initialization failed: ${error.message}`);
+    }
   }
 
   /**
@@ -129,15 +169,17 @@ export class GameEngine {
   }
 
   /**
-   * Initialize game systems with real parcels from API
+   * Initialize game systems with real parcels from API - IMPROVED with detailed logging
    */
   private async initializeSystems(): Promise<void> {
-    // Generate map data using MapFactory with real parcels
-    console.log('🏗️ Loading real parcels from API for map generation...');
-    const { tiles, obstacles, parcels } = await MapFactory.generateMapWithRealParcels('default');
-    
-    // Create tile map with real parcel data
-    this.tileMap = new TileMap(
+    try {
+      console.log('🏗️ Step 3a: Loading real parcels from API for map generation...');
+      const { tiles, obstacles, parcels } = await MapFactory.generateMapWithRealParcels('default');
+      console.log(`✅ Step 3a completed: Loaded ${parcels.length} parcels, ${tiles.length}x${tiles[0]?.length || 0} tiles, ${obstacles.size} obstacles`);
+
+      console.log('🏗️ Step 3b: Creating TileMap with real parcel data...');
+      // Create tile map with real parcel data
+      this.tileMap = new TileMap(
       {
         width: MAP_WIDTH,
         height: MAP_HEIGHT,
@@ -151,29 +193,57 @@ export class GameEngine {
     );
     const worldBounds = this.tileMap.getWorldBounds();
 
-    // Create a main world container that will hold all layers
+    // Create a main world container that will hold all layers - IMPROVED
     const worldContainer = new Container();
     worldContainer.name = 'WorldContainer';
-    
-    // Add all layers to the world container instead of directly to stage
+    worldContainer.sortableChildren = true;
+
+    // ✅ Verify stage is ready before adding containers
+    if (!this.app.stage) {
+      throw new Error('Pixi.js stage is not available for world container');
+    }
+
+    // Add all layers to the world container with proper z-index ordering
     this.layers.forEach((layer, layerType) => {
+      layer.sortableChildren = true;
+      layer.zIndex = layerType; // Use enum values as z-index
       worldContainer.addChild(layer);
-      console.log(`🌍 Added layer ${LayerType[layerType]} to world container`);
+      console.log(`🌍 Added layer ${LayerType[layerType]} to world container with z-index: ${layerType}`);
     });
-    
-    // Add the world container to the stage
-    this.app.stage.addChild(worldContainer);
-    console.log('🌍 World container added to stage');
+
+    // Add the world container to the stage with verification
+    try {
+      this.app.stage.addChild(worldContainer);
+      console.log('✅ World container successfully added to stage');
+      console.log(`📊 Stage children count: ${this.app.stage.children.length}`);
+    } catch (error) {
+      console.error('❌ Failed to add world container to stage:', error);
+      throw error;
+    }
 
     // Create viewport with the world container
     this.viewport = new Viewport(worldContainer, worldBounds);
     console.log('📷 Viewport created with world container');
+    
+    // Center the viewport to show the map optimally
+    this.viewport.centerOnMap();
+    console.log('🎯 Viewport centered on map for optimal viewing');
 
     // Add tilemap to the floor layer
     const floorLayer = this.layers.get(LayerType.FLOOR)!;
     const tilemapVisuals = this.tileMap.createVisuals();
     floorLayer.addChild(tilemapVisuals);
     console.log('🗺️ Tilemap added to floor layer');
+
+    // Add parcel containers to appropriate layers
+    const objectLayer = this.layers.get(LayerType.OBJECTS)!;
+    const parcelContainer = this.tileMap.getParcelContainer();
+    objectLayer.addChild(parcelContainer);
+    console.log('📦 Parcel container added to objects layer');
+
+    // Enable parcel visibility by default
+    this.tileMap.toggleParcelVisibility();
+    console.log('✅ Parcels are now visible on the map');
 
     // Initialize object pool
     this.objectPool = new ObjectPool();
@@ -203,7 +273,14 @@ export class GameEngine {
 
     // Show parcel numbers by default to help with identification
     console.log('🏗️ Enabling parcel numbers by default for better navigation');
-    this.tileMap.toggleParcels();
+    this.tileMap.toggleParcelVisibility();
+
+    console.log('✅ All game systems initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize game systems:', error);
+      console.error('❌ Error in initializeSystems:', error.stack);
+      throw error;
+    }
   }
 
   /**
@@ -274,9 +351,20 @@ export class GameEngine {
       this.viewport.stopDrag();
     };
 
-    // Mouse click for movement (left click only)
+    // Left click for camera movement (drag map)
     inputSystem.onLeftClick = (position: Position) => {
-      console.log('� GameEngine received LEFT click at:', position);
+      console.log('👆 GameEngine received LEFT click at:', position);
+      
+      const worldPos = this.viewport.screenToWorld(position);
+      console.log('🎥 Moving camera to world position:', worldPos);
+      
+      // Move camera to clicked position
+      this.viewport.moveTo(worldPos, true);
+    };
+
+    // Right click for avatar movement
+    inputSystem.onRightClick = (position: Position) => {
+      console.log('🎯 GameEngine received RIGHT click at:', position);
       
       if (!this.gameState.currentUser) {
         console.error('❌ No current user set!');
@@ -295,17 +383,6 @@ export class GameEngine {
       
       // Use MovementController for avatar movement
       this.movementController.handleMouseMovement(worldPos, this.gameState.currentUser.id);
-    };
-
-    // Right click for camera movement
-    inputSystem.onRightClick = (position: Position) => {
-      console.log('👆 GameEngine received RIGHT click at:', position);
-      
-      const worldPos = this.viewport.screenToWorld(position);
-      console.log('🎥 Moving camera to world position:', worldPos);
-      
-      // Move camera to clicked position
-      this.viewport.moveTo(worldPos, true);
     };
 
     // Keep general click handler for backward compatibility
@@ -346,6 +423,16 @@ export class GameEngine {
 
     // Start the game loop
     this.app.ticker.add(this.update.bind(this));
+    
+    // Emit event for components that need the GameEngine reference
+    const gameEngineReadyEvent = new CustomEvent('gameEngineReady', { detail: this });
+    window.dispatchEvent(gameEngineReadyEvent);
+    console.log('✅ Game engine initialized and ready event emitted');
+    
+    // Ensure ticker is started
+    if (!this.app.ticker.started) {
+      this.app.ticker.start();
+    }
   }
 
   /**
@@ -387,11 +474,11 @@ export class GameEngine {
   /**
    * Add user to the game
    */
-  public addUser(userData: Omit<AvatarData, 'position' | 'direction'>): AvatarData {
+  public addUser(userData: Omit<AvatarData, 'position' | 'direction'>, customPosition?: { x: number; y: number }): AvatarData {
     console.log(`🧑 Adding user: ${userData.name} (${userData.id})`);
     
-    // Find a spawn position
-    const spawnPosition = this.findSpawnPosition();
+    // Use custom position if provided, otherwise find a spawn position
+    const spawnPosition = customPosition || this.findSpawnPosition();
 
     const avatar: AvatarData = {
       ...userData,
@@ -438,9 +525,16 @@ export class GameEngine {
       this.gameState.currentUser = avatar;
       console.log(`👤 Current user set: ${avatar.name}`);
       
-      // Center camera on user
+      // Center camera on user with immediate positioning
+      console.log(`📷 Centering camera on user at (${avatar.position.x}, ${avatar.position.y})`);
       this.viewport.moveTo(avatar.position, true);
-      console.log(`📷 Camera centered on user at (${avatar.position.x}, ${avatar.position.y})`);
+      
+      // Force viewport to update immediately
+      setTimeout(() => {
+        this.viewport.moveTo(avatar.position, true);
+        console.log(`📷 Camera forcefully centered on user at (${avatar.position.x}, ${avatar.position.y})`);
+      }, 100);
+      
     } else {
       console.error('❌ Avatar not found for user:', userId);
     }
@@ -478,6 +572,114 @@ export class GameEngine {
     // Update visual representation
     const renderSystem = this.systems.get('render') as RenderSystem;
     renderSystem.updateAvatarStatus(userId, status);
+  }
+
+  /**
+   * Get the parcel where a specific avatar is located
+   */
+  public getAvatarParcel(userId: string): ParcelInfo | undefined {
+    const avatar = this.gameState.avatars.get(userId);
+    if (!avatar) return undefined;
+    
+    return this.tileMap.getParcelAtPosition(avatar.position.x, avatar.position.y);
+  }
+
+  /**
+   * Get the parcel where the current user is located
+   */
+  public getCurrentUserParcel(): ParcelInfo | undefined {
+    if (!this.gameState.currentUser) {
+      return undefined;
+    }
+    
+    const result = this.getAvatarParcel(this.gameState.currentUser.id);
+    return result;
+  }
+
+  /**
+   * Get parcel at specific world coordinates
+   */
+  public getParcelAtPosition(x: number, y: number): ParcelInfo | undefined {
+    return this.tileMap.getParcelAtPosition(x, y);
+  }
+
+  /**
+   * Get all parcels
+   */
+  public getAllParcels(): ParcelInfo[] {
+    return this.tileMap.getParcels();
+  }
+
+  /**
+   * Get parcel at screen coordinates (mouse position)
+   */
+  public getParcelAtScreenPosition(screenX: number, screenY: number): ParcelInfo | undefined {
+    const worldPos = this.viewport.screenToWorld({ x: screenX, y: screenY });
+    return this.tileMap.getParcelAtPosition(worldPos.x, worldPos.y);
+  }
+
+  /**
+   * Debug function to analyze parcel migration status
+   */
+  public debugParcelMigration(): {
+    totalParcels: number;
+    migratedParcels: number;
+    originalParcels: number;
+    validParcels: number;
+    invalidParcels: number;
+    parcelSummary: any[];
+  } {
+    const allParcels = this.getAllParcels();
+    
+    const migratedParcels = allParcels.filter(p => 
+      p.configSnapshot && p.configSnapshot.includes('api-migrated')
+    );
+    
+    const originalParcels = allParcels.filter(p => 
+      p.configSnapshot && p.configSnapshot.includes('api-loaded') && !p.configSnapshot.includes('migrated')
+    );
+    
+    const parcelSummary = allParcels.map(parcel => {
+      let config = null;
+      try {
+        config = JSON.parse(parcel.configSnapshot || '{}');
+      } catch (e) {
+        config = { error: 'Failed to parse config' };
+      }
+      
+      return {
+        number: parcel.number,
+        position: { x: parcel.x, y: parcel.y },
+        size: { width: parcel.width, height: parcel.height },
+        type: parcel.type,
+        source: config.source || 'unknown',
+        migrated: config.migration?.applied || false,
+        validPosition: config.validation?.isValid !== false
+      };
+    });
+    
+    const validParcels = parcelSummary.filter(p => p.validPosition).length;
+    const invalidParcels = parcelSummary.filter(p => !p.validPosition).length;
+    
+    const result = {
+      totalParcels: allParcels.length,
+      migratedParcels: migratedParcels.length,
+      originalParcels: originalParcels.length,
+      validParcels,
+      invalidParcels,
+      parcelSummary
+    };
+    
+    console.log('🔍 PARCEL MIGRATION DEBUG REPORT:');
+    console.log('================================');
+    console.log(`📊 Total parcels: ${result.totalParcels}`);
+    console.log(`🔄 Migrated parcels: ${result.migratedParcels}`);
+    console.log(`📦 Original parcels: ${result.originalParcels}`);
+    console.log(`✅ Valid positions: ${result.validParcels}`);
+    console.log(`❌ Invalid positions: ${result.invalidParcels}`);
+    console.log('📋 Parcel details:', result.parcelSummary);
+    
+    return result;
   }
 
   /**
@@ -535,16 +737,17 @@ export class GameEngine {
       y: worldBounds.height / 2,
     };
     
-    console.log('🏠 Using center spawn position:', centerPosition, 'world bounds:', worldBounds);
+    console.log('🏠 Finding spawn position. Center:', centerPosition, 'world bounds:', worldBounds);
     
-    // Simple validation - if center is walkable, use it
-    if (this.tileMap.isWalkable(centerPosition)) {
+    // Check if center is available (walkable and no other avatars)
+    if (this.isPositionAvailable(centerPosition)) {
+      console.log('🏠 Using center spawn position:', centerPosition);
       return centerPosition;
     }
     
-    // Try positions near center if center is not walkable
-    const maxAttempts = 20;
-    const searchRadius = 100; // Search within 100 pixels of center
+    // Try positions near center if center is not available
+    const maxAttempts = 50;
+    const searchRadius = 200; // Search within 200 pixels of center
     
     for (let i = 0; i < maxAttempts; i++) {
       const position: Position = {
@@ -552,14 +755,54 @@ export class GameEngine {
         y: centerPosition.y + (Math.random() - 0.5) * searchRadius,
       };
 
-      if (this.tileMap.isWalkable(position)) {
+      if (this.isPositionAvailable(position)) {
         console.log('🏠 Spawn position found near center:', position);
         return position;
       }
     }
     
-    console.log('🏠 Using fallback center position (may not be walkable):', centerPosition);
+    // If nothing found, try expanding search
+    for (let i = 0; i < maxAttempts; i++) {
+      const position: Position = {
+        x: centerPosition.x + (Math.random() - 0.5) * 400, // Wider search
+        y: centerPosition.y + (Math.random() - 0.5) * 400,
+      };
+
+      if (this.isPositionAvailable(position)) {
+        console.log('🏠 Spawn position found with wider search:', position);
+        return position;
+      }
+    }
+    
+    console.warn('🏠 No available spawn position found, using fallback center:', centerPosition);
     return centerPosition;
+  }
+
+  /**
+   * Check if a position is available (walkable and no other avatars nearby)
+   */
+  private isPositionAvailable(position: Position): boolean {
+    // First check if position is walkable
+    if (!this.tileMap.isWalkable(position)) {
+      return false;
+    }
+
+    // Check if any existing avatar is too close to this position
+    const minDistance = 64; // Minimum distance between avatars (2 tiles)
+    
+    for (const avatar of this.gameState.avatars.values()) {
+      const distance = Math.sqrt(
+        Math.pow(position.x - avatar.position.x, 2) + 
+        Math.pow(position.y - avatar.position.y, 2)
+      );
+      
+      if (distance < minDistance) {
+        console.log(`🚫 Position ${position.x},${position.y} too close to avatar ${avatar.id} (distance: ${distance.toFixed(2)})`);
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   /**
@@ -599,7 +842,41 @@ export class GameEngine {
    * Toggle parcel numbering overlay
    */
   public toggleParcels(): void {
-    this.tileMap.toggleParcels();
+    if (this.tileMap) {
+      this.tileMap.toggleParcelVisibility();
+    }
+  }
+
+  /**
+   * Get current parcels from the map
+   */
+  public getParcels(): ParcelInfo[] {
+    return this.tileMap ? this.tileMap.getParcels() : [];
+  }
+
+  /**
+   * Center the camera on the map for optimal viewing
+   */
+  public centerOnMap(): void {
+    if (this.viewport) {
+      this.viewport.centerOnMap();
+    }
+  }
+
+  /**
+   * Fit the entire map in the viewport
+   */
+  public fitMapToViewport(): void {
+    if (this.viewport) {
+      this.viewport.fitToViewport();
+    }
+  }
+
+  /**
+   * Get parcel at specific position
+   */
+  public getParcelAt(x: number, y: number): ParcelInfo | undefined {
+    return this.tileMap ? this.tileMap.getParcelAt(x, y) : undefined;
   }
 
   /**
@@ -1031,5 +1308,50 @@ export class GameEngine {
 
     // Destroy Pixi.js application
     this.app.destroy(true);
+  }
+
+  /**
+   * Get debug information about the game state
+   */
+  public getGameDebugInfo(): object {
+    const avatarInfo = [];
+    for (const [id, avatar] of this.gameState.avatars) {
+      avatarInfo.push({
+        id,
+        name: avatar.name,
+        position: avatar.position,
+        direction: avatar.direction,
+        visible: true,
+        layerChildren: this.layers.get(LayerType.CHARACTERS)?.children?.length
+      });
+    }
+
+    return {
+      engine: {
+        isRunning: this.isRunning,
+        hasTileMap: !!this.tileMap,
+        hasViewport: !!this.viewport,
+        systemsCount: this.systems.size
+      },
+      viewport: this.viewport ? {
+        state: this.viewport.getState()
+      } : null,
+      layers: Object.fromEntries(
+        Array.from(this.layers.entries()).map(([type, layer]) => [
+          LayerType[type],
+          {
+            children: layer.children.length,
+            visible: layer.visible,
+            alpha: layer.alpha,
+            zIndex: layer.zIndex
+          }
+        ])
+      ),
+      gameState: {
+        avatarsCount: this.gameState.avatars.size,
+        currentUser: this.gameState.currentUser?.name || null,
+        avatars: avatarInfo
+      }
+    };
   }
 }

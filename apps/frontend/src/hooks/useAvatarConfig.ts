@@ -10,23 +10,35 @@ export interface AvatarConfig {
 
 const STORAGE_KEY = 'virtualOffice_avatarConfig';
 
+// ✅ FIXED: Default configuration to prevent initialization blocking
+const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
+  name: 'Default User',
+  avatar: 'default',
+  color: 0x4287f5,
+  timestamp: Date.now()
+};
+
 export function useAvatarConfig() {
-  const [config, setConfig] = useState<AvatarConfig | null>(null);
+  const [config, setConfig] = useState<AvatarConfig>(DEFAULT_AVATAR_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load configuration from localStorage
+  // Load configuration from localStorage with immediate fallback
   const loadConfig = useCallback(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as AvatarConfig;
         setConfig(parsed);
-        console.log('🎨 Loaded avatar config:', parsed);
+        console.log('🎨 Loaded saved avatar config:', parsed);
       } else {
-        console.log('🎨 No saved avatar config found');
+        // ✅ Use default config immediately, don't wait
+        setConfig(DEFAULT_AVATAR_CONFIG);
+        console.log('🎨 Using default avatar config - no saved config found');
       }
     } catch (error) {
-      console.error('Error loading avatar config:', error);
+      console.error('❌ Error loading avatar config:', error);
+      // ✅ Fallback to default on error
+      setConfig(DEFAULT_AVATAR_CONFIG);
     } finally {
       setIsLoading(false);
     }

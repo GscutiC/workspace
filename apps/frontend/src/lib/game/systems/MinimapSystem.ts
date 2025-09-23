@@ -396,10 +396,21 @@ export class MinimapSystem {
     const viewport = this.gameState.viewport;
     if (!viewport) return;
     
-    // Calculate viewport bounds in minimap coordinates
-    const viewportWidth = 800; // Default screen width
-    const viewportHeight = 600; // Default screen height
+    // Get actual viewport dimensions dynamically
+    let viewportWidth = 800; // Default fallback
+    let viewportHeight = 600; // Default fallback
     
+    // Try to get actual screen dimensions
+    try {
+      if (window.innerWidth && window.innerHeight) {
+        viewportWidth = window.innerWidth;
+        viewportHeight = window.innerHeight;
+      }
+    } catch (e) {
+      // Fallback to defaults if window is not available
+    }
+    
+    // Calculate viewport bounds in minimap coordinates with proper zoom scaling
     const scaledViewportWidth = (viewportWidth / viewport.zoom) * this.SCALE_FACTOR;
     const scaledViewportHeight = (viewportHeight / viewport.zoom) * this.SCALE_FACTOR;
     

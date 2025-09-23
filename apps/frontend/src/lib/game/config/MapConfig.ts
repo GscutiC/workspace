@@ -100,13 +100,13 @@ export const DEFAULT_CONFIG: TerrainConfig = {
   },
   
   river: {
-    startHeightRatio: 0.4,
-    endHeightRatio: 0.6,
-    width: 5,
-    curviness: 8,
-    curveFrequency: 3,
-    bridgeCount: 4,
-    bridgeSpacing: 40
+    startHeightRatio: 0.0,      // Empezar desde el borde superior
+    endHeightRatio: 1.0,        // Hasta el borde inferior 
+    width: 8,                   // Río más ancho
+    curviness: 12,              // Más curvas
+    curveFrequency: 2,          // Menos frecuente
+    bridgeCount: 6,             // Más puentes
+    bridgeSpacing: 30
   },
   
   parks: {

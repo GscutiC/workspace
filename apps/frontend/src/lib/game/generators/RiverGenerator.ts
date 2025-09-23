@@ -24,6 +24,9 @@ export class RiverGenerator {
       bridgeCount: config.bridgeCount
     });
     
+    // Primero generar bordes de agua
+    this.generateWaterBorders(tiles);
+    
     // River flows diagonally through the city using config
     const riverStart = { x: 0, y: Math.floor(MAP_HEIGHT * config.startHeightRatio) };
     const riverEnd = { x: MAP_WIDTH - 1, y: Math.floor(MAP_HEIGHT * config.endHeightRatio) };
@@ -150,5 +153,75 @@ export class RiverGenerator {
         capacity: 0
       }
     });
+  }
+
+  /**
+   * Generate water borders around the map edges to create natural boundaries
+   */
+  private static generateWaterBorders(tiles: ExtendedTileData[][]): void {
+    console.log('🌊 Generating water borders around map edges');
+    const borderWidth = 3; // Ancho del borde de agua
+    
+    // Borde superior
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      for (let y = 0; y < borderWidth; y++) {
+        if (tiles[y] && tiles[y][x]) {
+          tiles[y][x] = {
+            ...tiles[y][x],
+            type: TileType.WATER,
+            walkable: false,
+            category: TileCategory.NATURE,
+            obstacleId: 'water_border_north',
+          };
+        }
+      }
+    }
+    
+    // Borde inferior
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      for (let y = MAP_HEIGHT - borderWidth; y < MAP_HEIGHT; y++) {
+        if (tiles[y] && tiles[y][x]) {
+          tiles[y][x] = {
+            ...tiles[y][x],
+            type: TileType.WATER,
+            walkable: false,
+            category: TileCategory.NATURE,
+            obstacleId: 'water_border_south',
+          };
+        }
+      }
+    }
+    
+    // Borde izquierdo
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      for (let x = 0; x < borderWidth; x++) {
+        if (tiles[y] && tiles[y][x]) {
+          tiles[y][x] = {
+            ...tiles[y][x],
+            type: TileType.WATER,
+            walkable: false,
+            category: TileCategory.NATURE,
+            obstacleId: 'water_border_west',
+          };
+        }
+      }
+    }
+    
+    // Borde derecho
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      for (let x = MAP_WIDTH - borderWidth; x < MAP_WIDTH; x++) {
+        if (tiles[y] && tiles[y][x]) {
+          tiles[y][x] = {
+            ...tiles[y][x],
+            type: TileType.WATER,
+            walkable: false,
+            category: TileCategory.NATURE,
+            obstacleId: 'water_border_east',
+          };
+        }
+      }
+    }
+    
+    console.log('✅ Water borders generated successfully');
   }
 }

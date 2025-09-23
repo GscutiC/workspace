@@ -22,6 +22,7 @@ export interface ParcelInfo {
  * - Main avenues and secondary streets
  * - City blocks with different districts
  * - Buildings distribution by district type
+ * - Integration with real parcels from API
  */
 export class CityGenerator {
   /**
@@ -52,6 +53,36 @@ export class CityGenerator {
     if (parcelsOutput) {
       console.log(`📦 Generated ${parcelsOutput.length} parcels`);
     }
+  }
+
+  /**
+   * Generate city structure that respects existing real parcels
+   * This method integrates real parcel data with visual map generation
+   */
+  public static generateCityBlocksWithRealParcels(
+    tiles: ExtendedTileData[][], 
+    obstacles: Map<string, ObstacleInfo>,
+    config: CityConfig,
+    realParcels: ParcelInfo[]
+  ): void {
+    console.log('🏗️ Generating city with real parcels integration:', {
+      parcelCount: realParcels.length,
+      blockSize: config.blockSize
+    });
+    
+    // 1. First generate basic street grid (this doesn't conflict with parcels)
+    this.generateMainAvenues(tiles, config.avenueSpacing, config.mainStreetWidth);
+    this.generateSecondaryStreets(tiles, config.blockSize, config.secondaryStreetWidth);
+    
+    // 2. For each real parcel, ensure the area is properly prepared
+    realParcels.forEach(parcel => {
+      this.prepareParcelandArea(tiles, obstacles, parcel, config);
+    });
+    
+    // 3. Fill remaining areas with generated content
+    this.fillRemainingAreasWithBuildings(tiles, obstacles, config, realParcels);
+    
+    console.log('✅ City generated with real parcels integrated!');
   }
   
   /**
@@ -161,6 +192,182 @@ export class CityGenerator {
         for (let y = startY; y < startY + config.blockSize && y < MAP_HEIGHT; y++) {
           for (let x = startX; x < startX + config.blockSize && x < MAP_WIDTH; x++) {
             this.fillBlockTile(tiles, obstacles, x, y, districtType, startX, startY, config.blockSize);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Prepare a specific parcel area on the map
+   */
+  private static prepareParcelandArea(
+    tiles: ExtendedTileData[][],
+    obstacles: Map<string, ObstacleInfo>,
+    parcel: ParcelInfo,
+    _config: CityConfig
+  ): void {
+    // Convert world coordinates to tile coordinates
+    const startTileX = Math.floor(parcel.x / TILE_SIZE);
+    const startTileY = Math.floor(parcel.y / TILE_SIZE);
+    const endTileX = Math.min(MAP_WIDTH - 1, startTileX + Math.floor(parcel.width / TILE_SIZE));
+    const endTileY = Math.min(MAP_HEIGHT - 1, startTileY + Math.floor(parcel.height / TILE_SIZE));
+    
+    // Validate bounds
+    if (startTileX < 0 || startTileY < 0 || startTileX >= MAP_WIDTH || startTileY >= MAP_HEIGHT) {
+      console.warn(`⚠️ Parcel ${parcel.number} is outside map bounds:`, { parcel, startTileX, startTileY });
+      return;
+    }
+    
+    // Fill parcel area based on its type
+    for (let y = startTileY; y < endTileY; y++) {
+      for (let x = startTileX; x < endTileX; x++) {
+        this.fillParcelTile(tiles, obstacles, x, y, parcel, startTileX, startTileY, endTileX - startTileX, endTileY - startTileY);
+      }
+    }
+  }
+
+  /**
+   * Fill a single tile within a real parcel
+   */
+  private static fillParcelTile(
+    tiles: ExtendedTileData[][], 
+    obstacles: Map<string, ObstacleInfo>,
+    x: number, 
+    y: number, 
+    parcel: ParcelInfo,
+    parcelStartX: number,
+    parcelStartY: number,
+    parcelWidth: number,
+    parcelHeight: number
+  ): void {
+    const relX = x - parcelStartX;
+    const relY = y - parcelStartY;
+    const isPerimeter = relX === 0 || relY === 0 || relX === parcelWidth - 1 || relY === parcelHeight - 1;
+    const isCorner = (relX === 0 || relX === parcelWidth - 1) && (relY === 0 || relY === parcelHeight - 1);
+    
+    // Determine building type based on parcel type
+    let buildingType: TileType;
+    switch (parcel.type) {
+      case 'residential':
+        buildingType = TileType.RESIDENTIAL_BUILDING;
+        break;
+      case 'commercial':
+        buildingType = TileType.COMMERCIAL_BUILDING;
+        break;
+      case 'office':
+        buildingType = TileType.OFFICE_BUILDING;
+        break;
+      case 'mixed':
+        buildingType = Math.random() < 0.5 ? TileType.COMMERCIAL_BUILDING : TileType.OFFICE_BUILDING;
+        break;
+      case 'public':
+        buildingType = TileType.PARK_GRASS;
+        break;
+      case 'infrastructure':
+        buildingType = TileType.BUILDING;
+        break;
+      default:
+        buildingType = TileType.BUILDING;
+    }
+    
+    if (isPerimeter && !isCorner && buildingType !== TileType.PARK_GRASS) {
+      // Buildings on perimeter (but not corners for entrance)
+      const obstacleId = `parcel_${parcel.number}_building_${x}_${y}`;
+      tiles[y][x] = {
+        ...tiles[y][x],
+        type: buildingType,
+        walkable: false,
+        category: TileCategory.BUILDING,
+        obstacleId,
+      };
+      
+      obstacles.set(obstacleId, {
+        id: obstacleId,
+        position: { x, y },
+        bounds: { x, y, width: 1, height: 1 },
+        metadata: {
+          name: `Parcela ${parcel.number} - Edificio`,
+          type: parcel.type,
+          interactive: true,
+          description: `Edificio de la parcela ${parcel.number} (${parcel.type})`,
+          canEnter: false,
+          isOffice: parcel.type === 'office',
+          isPark: parcel.type === 'public',
+          floors: Math.floor(Math.random() * 5) + 1
+        }
+      });
+    } else {
+      // Interior area - walkable space or green area
+      if (parcel.type === 'public') {
+        tiles[y][x] = {
+          ...tiles[y][x],
+          type: TileType.PARK_GRASS,
+          walkable: true,
+          category: TileCategory.WALKABLE,
+        };
+      } else {
+        tiles[y][x] = {
+          ...tiles[y][x],
+          type: TileType.SIDEWALK,
+          walkable: true,
+          category: TileCategory.WALKABLE,
+        };
+      }
+    }
+  }
+
+  /**
+   * Fill areas not covered by real parcels with generated buildings
+   */
+  private static fillRemainingAreasWithBuildings(
+    tiles: ExtendedTileData[][], 
+    obstacles: Map<string, ObstacleInfo>,
+    config: CityConfig,
+    realParcels: ParcelInfo[]
+  ): void {
+    // Create a map of occupied areas
+    const occupiedTiles = new Set<string>();
+    
+    realParcels.forEach(parcel => {
+      const startTileX = Math.floor(parcel.x / TILE_SIZE);
+      const startTileY = Math.floor(parcel.y / TILE_SIZE);
+      const endTileX = Math.min(MAP_WIDTH, startTileX + Math.ceil(parcel.width / TILE_SIZE));
+      const endTileY = Math.min(MAP_HEIGHT, startTileY + Math.ceil(parcel.height / TILE_SIZE));
+      
+      for (let y = Math.max(0, startTileY); y < endTileY; y++) {
+        for (let x = Math.max(0, startTileX); x < endTileX; x++) {
+          occupiedTiles.add(`${x},${y}`);
+        }
+      }
+    });
+    
+    // Fill unoccupied areas with generated content
+    const blockSpacing = config.blockSize + config.blockSpacing;
+    
+    for (let blockY = 0; blockY < Math.floor(MAP_HEIGHT / blockSpacing); blockY++) {
+      for (let blockX = 0; blockX < Math.floor(MAP_WIDTH / blockSpacing); blockX++) {
+        const startX = blockX * blockSpacing + config.secondaryStreetWidth;
+        const startY = blockY * blockSpacing + config.secondaryStreetWidth;
+        
+        // Check if this block area is free
+        let isBlockFree = true;
+        for (let y = startY; y < startY + config.blockSize && y < MAP_HEIGHT && isBlockFree; y++) {
+          for (let x = startX; x < startX + config.blockSize && x < MAP_WIDTH && isBlockFree; x++) {
+            if (occupiedTiles.has(`${x},${y}`)) {
+              isBlockFree = false;
+            }
+          }
+        }
+        
+        // If block is free, fill it with generated content
+        if (isBlockFree) {
+          const districtType = this.getDistrictType(blockX, blockY, config);
+          
+          for (let y = startY; y < startY + config.blockSize && y < MAP_HEIGHT; y++) {
+            for (let x = startX; x < startX + config.blockSize && x < MAP_WIDTH; x++) {
+              this.fillBlockTile(tiles, obstacles, x, y, districtType, startX, startY, config.blockSize);
+            }
           }
         }
       }
@@ -300,185 +507,15 @@ export class CityGenerator {
   private static getBuildingTypeForDistrict(districtType: 'commercial' | 'residential' | 'office' | 'mixed'): string {
     switch (districtType) {
       case 'commercial':
-        return Math.random() < 0.5 ? 'shop' : 'restaurant';
+        return 'SHOP';
       case 'residential':
-        return Math.random() < 0.3 ? 'house' : 'apartment';
+        return 'HOUSE';
       case 'office':
-        return 'office';
+        return 'OFFICE';
       case 'mixed':
-        const types = ['shop', 'office', 'apartment', 'restaurant'];
-        return types[Math.floor(Math.random() * types.length)];
+        return Math.random() < 0.5 ? 'SHOP' : 'OFFICE';
       default:
-        return 'mixed';
+        return 'CUSTOM';
     }
-  }
-
-  /**
-   * Generate city structure using real parcels from API
-   * This creates the visual city environment around real parcel data
-   */
-  public static generateCityBlocksWithRealParcels(
-    tiles: ExtendedTileData[][], 
-    obstacles: Map<string, ObstacleInfo>,
-    config: CityConfig,
-    realParcels: ParcelInfo[]
-  ): void {
-    console.log('🏗️ Generating city blocks with real parcels:', {
-      realParcelsCount: realParcels.length,
-      blockSize: config.blockSize,
-      avenueSpacing: config.avenueSpacing,
-      mainStreetWidth: config.mainStreetWidth
-    });
-    
-    // 1. Create main avenue grid (same as normal generation)
-    this.generateMainAvenues(tiles, config.avenueSpacing, config.mainStreetWidth);
-    
-    // 2. Create secondary street grid (same as normal generation)  
-    this.generateSecondaryStreets(tiles, config.blockSize, config.secondaryStreetWidth);
-    
-    // 3. Place real parcels in their exact positions
-    this.placeRealParcelsOnMap(tiles, obstacles, realParcels);
-    
-    // 4. Fill remaining areas with appropriate city elements
-    this.fillEmptyAreasWithCityElements(tiles, obstacles, config);
-    
-    console.log(`✅ City blocks generated with ${realParcels.length} real parcels!`);
-  }
-
-  /**
-   * Place real parcels from API onto the map tiles
-   */
-  private static placeRealParcelsOnMap(
-    tiles: ExtendedTileData[][],
-    obstacles: Map<string, ObstacleInfo>,
-    parcels: ParcelInfo[]
-  ): void {
-    console.log('📍 Placing real parcels on map...');
-    
-    parcels.forEach(parcel => {
-      // Convert world coordinates to tile coordinates
-      const tileX = Math.floor(parcel.x / TILE_SIZE);
-      const tileY = Math.floor(parcel.y / TILE_SIZE);
-      const tileWidth = Math.floor(parcel.width / TILE_SIZE);
-      const tileHeight = Math.floor(parcel.height / TILE_SIZE);
-      
-      // Place parcel tiles
-      for (let y = tileY; y < tileY + tileHeight && y < MAP_HEIGHT; y++) {
-        for (let x = tileX; x < tileX + tileWidth && x < MAP_WIDTH; x++) {
-          if (tiles[y] && tiles[y][x]) {
-            const buildingType = this.getParcelBuildingType(parcel);
-            
-            tiles[y][x] = {
-              ...tiles[y][x],
-              type: buildingType,
-              walkable: false,
-              category: TileCategory.BUILDING,
-            };
-          }
-        }
-      }
-    });
-    
-    console.log(`✅ Placed ${parcels.length} real parcels on map`);
-  }
-
-  /**
-   * Convert parcel building type to tile type
-   */
-  private static getParcelBuildingType(parcel: ParcelInfo): TileType {
-    if (parcel.buildingType && parcel.buildingType !== 'EMPTY') {
-      const buildingType = parcel.buildingType.toLowerCase();
-      
-      switch (buildingType) {
-        case 'house':
-        case 'apartment':
-          return TileType.BUILDING;
-        case 'shop':
-        case 'restaurant':
-          return TileType.BUILDING;
-        case 'office':
-          return TileType.BUILDING;
-        case 'factory':
-        case 'warehouse':
-          return TileType.BUILDING;
-        case 'park':
-        case 'plaza':
-          return TileType.PARK_GRASS;
-        case 'hospital':
-        case 'school':
-          return TileType.BUILDING;
-        default:
-          return TileType.BUILDING;
-      }
-    }
-    
-    // Default based on parcel type
-    switch (parcel.type) {
-      case 'residential':
-        return TileType.RESIDENTIAL_BUILDING;
-      case 'commercial':
-        return TileType.COMMERCIAL_BUILDING;
-      case 'office':
-        return TileType.OFFICE_BUILDING;
-      case 'mixed':
-        return TileType.BUILDING;
-      default:
-        return TileType.BUILDING;
-    }
-  }
-
-  /**
-   * Fill empty areas with appropriate city elements
-   */
-  private static fillEmptyAreasWithCityElements(
-    tiles: ExtendedTileData[][],
-    obstacles: Map<string, ObstacleInfo>,
-    config: CityConfig
-  ): void {
-    console.log('🏗️ Filling empty areas with city elements...');
-    
-    // Add some random buildings in empty spaces to make the city look more complete
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-      for (let x = 0; x < MAP_WIDTH; x++) {
-        const tile = tiles[y][x];
-        
-        // If it's still a floor tile and not near streets, potentially add a building
-        if (tile.type === TileType.FLOOR && Math.random() < 0.1) {
-          // Check if it's not too close to streets (basic spacing)
-          const nearStreet = this.isNearStreet(tiles, x, y, 2);
-          
-          if (!nearStreet) {
-            tiles[y][x] = {
-              ...tile,
-              type: TileType.BUILDING,
-              walkable: false,
-              category: TileCategory.BUILDING,
-            };
-          }
-        }
-      }
-    }
-    
-    console.log('✅ Filled empty areas with city elements');
-  }
-
-  /**
-   * Check if a position is near a street
-   */
-  private static isNearStreet(tiles: ExtendedTileData[][], x: number, y: number, radius: number): boolean {
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        const checkX = x + dx;
-        const checkY = y + dy;
-        
-        if (checkX >= 0 && checkX < MAP_WIDTH && checkY >= 0 && checkY < MAP_HEIGHT) {
-          const checkTile = tiles[checkY][checkX];
-          if (checkTile.type === TileType.STREET) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
   }
 }

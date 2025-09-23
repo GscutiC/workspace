@@ -1,4 +1,5 @@
 import type { ParcelInfo } from './generators/CityGenerator';
+import { ParcelMigration } from './ParcelMigration';
 import type { BackendParcel } from '@/hooks/useParcelAPI';
 
 // API configuration
@@ -28,28 +29,53 @@ export class ParcelLoader {
       const data = await response.json();
       const backendParcels: BackendParcel[] = data.parcels || [];
       
-      // Convert backend parcels to game engine format
-      const gameParcels: ParcelInfo[] = backendParcels.map(parcel => ({
-        number: parcel.number,
-        x: parcel.x,
-        y: parcel.y,
-        width: parcel.width,
-        height: parcel.height,
-        type: this.mapParcelType(parcel.parcelType),
-        status: this.mapParcelStatus(parcel.status),
-        price: parcel.currentPrice || parcel.basePrice || 0,
-        owner: parcel.owner?.name || parcel.ownerId || undefined,
-        buildingType: parcel.buildingType || 'EMPTY',
-        preset: parcel.preset || 'api-loaded',
-        configSnapshot: JSON.stringify({
-          source: 'api',
-          apiId: parcel.id,
-          organizationId: parcel.organizationId,
-          spaceId: parcel.spaceId,
-          createdAt: parcel.createdAt,
-          updatedAt: parcel.updatedAt
-        })
-      }));
+      // Convert backend parcels to game engine format using migration system
+      const gameParcels: ParcelInfo[] = backendParcels.map(parcel => {
+        
+        // Use migration system to properly position parcels in the new map layout
+        const oldCoords = {
+          x: parcel.x,
+          y: parcel.y,
+          width: parcel.width,
+          height: parcel.height
+        };
+        
+        const newCoords = ParcelMigration.migrateParcelCoordinates(oldCoords);
+        
+        // Validate the new position
+        const validation = ParcelMigration.validateParcelPosition(newCoords);
+        if (!validation.isValid) {
+          console.warn(`⚠️ Parcel ${parcel.number} has position issues:`, validation.issues);
+        }
+        
+        return {
+          number: parcel.number,
+          x: newCoords.x,
+          y: newCoords.y,
+          width: newCoords.width,
+          height: newCoords.height,
+          type: this.mapParcelType(parcel.parcelType),
+          districtType: this.mapParcelTypeToDistrict(parcel.parcelType),
+          buildingType: parcel.buildingType || 'EMPTY',
+          preset: parcel.preset || 'api-loaded-migrated',
+          configSnapshot: JSON.stringify({
+            source: 'api-migrated',
+            apiId: parcel.id,
+            organizationId: parcel.organizationId,
+            spaceId: parcel.spaceId,
+            originalCoords: { x: parcel.x, y: parcel.y },
+            migratedCoords: { x: newCoords.x, y: newCoords.y },
+            migration: {
+              applied: true,
+              timestamp: new Date().toISOString(),
+              waterBorderOffset: 3
+            },
+            validation: validation,
+            createdAt: parcel.createdAt,
+            updatedAt: parcel.updatedAt
+          })
+        };
+      });
       
       console.log(`✅ Loaded ${gameParcels.length} real parcels from API`);
       return gameParcels;
@@ -66,39 +92,44 @@ export class ParcelLoader {
   /**
    * Map backend parcel type to game engine type
    */
-  private static mapParcelType(backendType: string): 'residential' | 'commercial' | 'industrial' | 'mixed' {
+  private static mapParcelType(backendType: string): 'residential' | 'commercial' | 'office' | 'mixed' | 'public' | 'infrastructure' {
     switch (backendType) {
       case 'RESIDENTIAL':
         return 'residential';
       case 'COMMERCIAL':
         return 'commercial';
       case 'INDUSTRIAL':
-        return 'industrial';
+        return 'infrastructure'; // Map industrial to infrastructure
       case 'MIXED_USE':
         return 'mixed';
+      case 'OFFICE':
+        return 'office';
+      case 'PUBLIC':
+        return 'public';
       default:
         return 'residential'; // Default fallback
     }
   }
 
   /**
-   * Map backend parcel status to game engine status
+   * Map backend parcel type to district type
    */
-  private static mapParcelStatus(backendStatus: string): 'available' | 'reserved' | 'sold' | 'maintenance' {
-    switch (backendStatus) {
-      case 'AVAILABLE':
-        return 'available';
-      case 'RESERVED':
-        return 'reserved';
-      case 'OWNED':
-      case 'UNDER_CONSTRUCTION':
-      case 'DEVELOPED':
-        return 'sold';
-      case 'ABANDONED':
+  private static mapParcelTypeToDistrict(backendType: string): 'commercial' | 'residential' | 'office' | 'mixed' {
+    switch (backendType) {
+      case 'RESIDENTIAL':
+        return 'residential';
+      case 'COMMERCIAL':
+        return 'commercial';
+      case 'INDUSTRIAL':
+        return 'mixed'; // Map industrial to mixed district
+      case 'MIXED_USE':
+        return 'mixed';
+      case 'OFFICE':
+        return 'office';
       case 'PUBLIC':
-        return 'maintenance';
+        return 'mixed'; // Map public to mixed district
       default:
-        return 'available'; // Default fallback
+        return 'residential'; // Default fallback
     }
   }
 
@@ -117,13 +148,12 @@ export class ParcelLoader {
         const parcelNumber = row * 5 + col + 1;
         fallbackParcels.push({
           number: parcelNumber,
-          x: col * 64, // 2 tiles wide (32px each)
-          y: row * 64, // 2 tiles tall
+          x: col * 64 + 2800, // Position near center like real parcels
+          y: row * 64 + 2200, // Position near center like real parcels  
           width: 64,
           height: 64,
           type: col % 2 === 0 ? 'residential' : 'commercial',
-          status: 'available',
-          price: 50000 + (row * col * 1000),
+          districtType: col % 2 === 0 ? 'residential' : 'commercial', // Required field
           buildingType: 'EMPTY',
           preset: 'fallback',
           configSnapshot: JSON.stringify({ source: 'fallback' })

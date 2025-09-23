@@ -15,34 +15,34 @@ datasource db {
 // ================================
 
 model User {
-  id            String   @id @default(cuid())
-  clerkId       String   @unique @map("clerk_id")
-  email         String   @unique
-  firstName     String?  @map("first_name")
-  lastName      String?  @map("last_name")
-  avatarUrl     String?  @map("avatar_url")
-  phone         String?
-  address       String?
+  id        String  @id @default(cuid())
+  clerkId   String  @unique @map("clerk_id")
+  email     String  @unique
+  firstName String? @map("first_name")
+  lastName  String? @map("last_name")
+  avatarUrl String? @map("avatar_url")
+  phone     String?
+  address   String?
 
   // Organization relationship
-  organizationId String? @map("organization_id")
+  organizationId String?       @map("organization_id")
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   // Gamification stats
-  totalPoints   Int @default(0) @map("total_points")
-  level         Int @default(1)
-  streak        Int @default(0)
-  lastActiveAt  DateTime? @map("last_active_at")
+  totalPoints  Int       @default(0) @map("total_points")
+  level        Int       @default(1)
+  streak       Int       @default(0)
+  lastActiveAt DateTime? @map("last_active_at")
 
   // Preferences JSON
-  preferences   Json?
+  preferences Json?
 
   // Relations
-  sentMessages     Message[] @relation("MessageSender")
-  sessions         Session[]
-  achievements     UserAchievement[]
-  createdSpaces    Space[] @relation("SpaceCreator")
-  ownedParcels     Parcel[] @relation("ParcelOwner")
+  sentMessages  Message[]         @relation("MessageSender")
+  sessions      Session[]
+  achievements  UserAchievement[]
+  createdSpaces Space[]           @relation("SpaceCreator")
+  ownedParcels  Parcel[]          @relation("ParcelOwner")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -54,34 +54,35 @@ model User {
 }
 
 model Organization {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
-  slug        String @unique
+  slug        String  @unique
   description String?
   logoUrl     String? @map("logo_url")
 
   // Subscription
-  plan        SubscriptionPlan @default(FREE)
-  planExpiresAt DateTime? @map("plan_expires_at")
+  plan          SubscriptionPlan @default(FREE)
+  planExpiresAt DateTime?        @map("plan_expires_at")
 
   // Settings JSON
-  settings    Json?
+  settings Json?
 
   // Limits based on plan
-  maxUsers    Int @default(10) @map("max_users")
-  maxSpaces   Int @default(3) @map("max_spaces")
-  maxStorage  Int @default(1024) @map("max_storage") // MB
+  maxUsers   Int @default(10) @map("max_users")
+  maxSpaces  Int @default(3) @map("max_spaces")
+  maxStorage Int @default(1024) @map("max_storage") // MB
 
   // Owner information
-  ownerId     String? @map("owner_id")
+  ownerId String? @map("owner_id")
 
   // Relations
-  users       User[]
-  spaces      Space[]
-  parcels     Parcel[]
+  users     User[]
+  spaces    Space[]
+  parcels   Parcel[]
+  districts District[]
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([slug])
   @@index([ownerId])
@@ -93,38 +94,39 @@ model Organization {
 // ================================
 
 model Space {
-  id             String @id @default(cuid())
-  name           String
-  description    String?
+  id          String  @id @default(cuid())
+  name        String
+  description String?
 
   // 2D Layout JSON - contains map configuration, objects, etc.
-  layout         Json
+  layout Json
 
   // Background and theme
-  backgroundUrl  String? @map("background_url")
-  theme          SpaceTheme @default(MODERN)
+  backgroundUrl String?    @map("background_url")
+  theme         SpaceTheme @default(MODERN)
 
   // Configuration
-  isActive       Boolean @default(true) @map("is_active")
-  isPublic       Boolean @default(true) @map("is_public")
-  maxUsers       Int @default(50) @map("max_users")
-  requireInvite  Boolean @default(false) @map("require_invite")
+  isActive      Boolean @default(true) @map("is_active")
+  isPublic      Boolean @default(true) @map("is_public")
+  maxUsers      Int     @default(50) @map("max_users")
+  requireInvite Boolean @default(false) @map("require_invite")
 
   // Creator and organization
-  creatorId      String @map("creator_id")
-  creator        User @relation("SpaceCreator", fields: [creatorId], references: [id])
+  creatorId String @map("creator_id")
+  creator   User   @relation("SpaceCreator", fields: [creatorId], references: [id])
 
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   // Relations
-  rooms          Room[]
-  sessions       Session[]
-  invites        SpaceInvite[]
-  parcels        Parcel[]
+  rooms     Room[]
+  sessions  Session[]
+  invites   SpaceInvite[]
+  parcels   Parcel[]
+  districts District[]
 
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([organizationId])
   @@index([creatorId])
@@ -133,40 +135,40 @@ model Space {
 }
 
 model Room {
-  id           String   @id @default(cuid())
-  name         String
-  description  String?
-  type         RoomType
-  capacity     Int      @default(8)
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        RoomType
+  capacity    Int      @default(8)
 
   // Privacy settings
-  isPrivate    Boolean @default(false) @map("is_private")
-  password     String?
-  allowGuests  Boolean @default(true) @map("allow_guests")
+  isPrivate   Boolean @default(false) @map("is_private")
+  password    String?
+  allowGuests Boolean @default(true) @map("allow_guests")
 
   // Position and size in space (pixels)
-  x            Float
-  y            Float
-  width        Float
-  height       Float
-  rotation     Float? @default(0)
+  x        Float
+  y        Float
+  width    Float
+  height   Float
+  rotation Float? @default(0)
 
   // Visual configuration
-  color        String? @default("#3B82F6")
-  icon         String? // Icon name or emoji
+  color String? @default("#3B82F6")
+  icon  String? // Icon name or emoji
 
   // Room-specific configuration JSON
-  config       Json?
+  config Json?
 
   // Relations
-  spaceId      String @map("space_id")
-  space        Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  spaceId String @map("space_id")
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
 
-  messages     Message[]
-  sessions     Session[]
+  messages Message[]
+  sessions Session[]
 
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([spaceId])
   @@index([type])
@@ -174,16 +176,16 @@ model Room {
 }
 
 model SpaceInvite {
-  id        String @id @default(cuid())
-  email     String
-  token     String @unique
+  id    String @id @default(cuid())
+  email String
+  token String @unique
 
-  spaceId   String @map("space_id")
-  space     Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  spaceId String @map("space_id")
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
 
   invitedById String @map("invited_by_id")
 
-  isUsed    Boolean @default(false) @map("is_used")
+  isUsed    Boolean  @default(false) @map("is_used")
   expiresAt DateTime @map("expires_at")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -198,37 +200,37 @@ model SpaceInvite {
 // ================================
 
 model Session {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
 
   // User tracking
-  userId    String @map("user_id")
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Location tracking
-  spaceId   String? @map("space_id")
-  space     Space? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  spaceId String? @map("space_id")
+  space   Space?  @relation(fields: [spaceId], references: [id], onDelete: SetNull)
 
-  roomId    String? @map("room_id")
-  room      Room? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  roomId String? @map("room_id")
+  room   Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
 
   // Position tracking (avatar position in 2D space)
-  x         Float?
-  y         Float?
+  x Float?
+  y Float?
 
   // Session status
-  status    SessionStatus @default(ACTIVE)
+  status SessionStatus @default(ACTIVE)
 
   // Time tracking
-  startedAt DateTime @default(now()) @map("started_at")
+  startedAt DateTime  @default(now()) @map("started_at")
   endedAt   DateTime? @map("ended_at")
   duration  Int? // in seconds, calculated when session ends
 
   // Session metadata JSON
-  metadata  Json?
+  metadata Json?
 
   // Activity tracking
-  isActive  Boolean @default(true) @map("is_active")
-  lastSeen  DateTime @default(now()) @map("last_seen")
+  isActive Boolean  @default(true) @map("is_active")
+  lastSeen DateTime @default(now()) @map("last_seen")
 
   @@index([userId])
   @@index([spaceId])
@@ -243,21 +245,21 @@ model Session {
 // ================================
 
 model UserAchievement {
-  id            String @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId        String @map("user_id")
-  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type          AchievementType
-  title         String
-  description   String
-  points        Int
-  badgeUrl      String? @map("badge_url")
+  type        AchievementType
+  title       String
+  description String
+  points      Int
+  badgeUrl    String?         @map("badge_url")
 
   // Achievement metadata
-  metadata      Json?
+  metadata Json?
 
-  unlockedAt    DateTime @default(now()) @map("unlocked_at")
+  unlockedAt DateTime @default(now()) @map("unlocked_at")
 
   @@unique([userId, type])
   @@index([userId])
@@ -270,23 +272,23 @@ model UserAchievement {
 // ================================
 
 model Message {
-  id        String @id @default(cuid())
-  content   String
-  type      MessageType @default(TEXT)
+  id      String      @id @default(cuid())
+  content String
+  type    MessageType @default(TEXT)
 
   // Sender
-  senderId  String @map("sender_id")
-  sender    User @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId String @map("sender_id")
+  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   // Location (room or direct message)
-  roomId    String? @map("room_id")
-  room      Room? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  roomId String? @map("room_id")
+  room   Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
 
   // Direct message target
   targetUserId String? @map("target_user_id")
 
   // Message data and attachments
-  metadata  Json?
+  metadata    Json?
   attachments Json? // URLs, file info, etc.
 
   // Message status
@@ -295,9 +297,9 @@ model Message {
   isPinned  Boolean @default(false) @map("is_pinned")
 
   // Thread support
-  parentId  String? @map("parent_id")
-  parent    Message? @relation("MessageThread", fields: [parentId], references: [id])
-  replies   Message[] @relation("MessageThread")
+  parentId String?   @map("parent_id")
+  parent   Message?  @relation("MessageThread", fields: [parentId], references: [id])
+  replies  Message[] @relation("MessageThread")
 
   // Reactions JSON array
   reactions Json?
@@ -381,90 +383,141 @@ enum MessageType {
 }
 
 // ================================
-// PARCEL & MAP MANAGEMENT MODELS
+// PARCEL MANAGEMENT SYSTEM
 // ================================
 
+model District {
+  id          String  @id @default(cuid())
+  name        String // Nombre del distrito
+  description String? // Descripción opcional
+
+  // Boundaries in tile coordinates
+  bounds Json // {x1, y1, x2, y2} defining district area
+
+  // District properties
+  districtType DistrictType // Tipo de distrito
+  color        String // Color hex para visualización
+  zoneCode     String // Código de zona (ej: "D-001", "C-002")
+
+  // Economic properties
+  basePriceMultiplier Float @default(1.0) // Multiplicador de precio base
+  taxRate             Float @default(0.05) // Tasa de impuestos del distrito
+
+  // Organization relationship
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  spaceId String @map("space_id")
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  // Relations
+  parcels Parcel[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, spaceId, zoneCode]) // Código único por espacio
+  @@index([organizationId])
+  @@index([spaceId])
+  @@index([districtType])
+  @@map("districts")
+}
+
+enum DistrictType {
+  COMMERCIAL // Distrito comercial
+  RESIDENTIAL // Distrito residencial
+  INDUSTRIAL // Distrito industrial
+  MIXED_USE // Distrito de uso mixto
+  RECREATIONAL // Distrito recreativo
+  ADMINISTRATIVE // Distrito administrativo
+}
+
 model Parcel {
-  id          String @id @default(cuid())
-  number      Int             // Número único de parcela (1, 2, 3, etc.)
-  name        String?         // Nombre opcional de la parcela
+  id          String  @id @default(cuid())
+  number      Int // Número único de parcela (1, 2, 3, etc.)
+  name        String? // Nombre opcional de la parcela
   description String?
 
   // Position and dimensions in the map (in tile coordinates)
-  x           Int             // Posición X en el mapa (tiles)
-  y           Int             // Posición Y en el mapa (tiles)
-  width       Int             // Ancho en tiles
-  height      Int             // Alto en tiles
+  x      Int // Posición X en el mapa (tiles)
+  y      Int // Posición Y en el mapa (tiles)
+  width  Int // Ancho en tiles
+  height Int // Alto en tiles
 
   // Parcel properties
-  parcelType  ParcelType      // Tipo de parcela
-  status      ParcelStatus @default(AVAILABLE)
-  buildingType BuildingType?  // Tipo de edificio construido (si aplica)
+  parcelType   ParcelType // Tipo de parcela
+  status       ParcelStatus  @default(AVAILABLE)
+  buildingType BuildingType? // Tipo de edificio construido (si aplica)
 
   // Economic properties
-  basePrice   Float?          // Precio base de la parcela
-  currentPrice Float?         // Precio actual
-  monthlyTax  Float? @default(0) // Impuesto mensual
+  basePrice    Float? // Precio base de la parcela
+  currentPrice Float? // Precio actual
+  monthlyTax   Float? @default(0) // Impuesto mensual
 
   // Ownership
-  ownerId     String? @map("owner_id")
-  owner       User? @relation("ParcelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId String? @map("owner_id")
+  owner   User?   @relation("ParcelOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   // Organization and space relationship
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  spaceId     String @map("space_id")
-  space       Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  spaceId String @map("space_id")
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  // District relationship
+  districtId String?   @map("district_id")
+  district   District? @relation(fields: [districtId], references: [id], onDelete: SetNull)
 
   // Map configuration metadata
-  mapConfig   String?         // JSON string with map generation config used
-  preset      String?         // Preset name used for generation
+  mapConfig String? // JSON string with map generation config used
+  preset    String? // Preset name used for generation
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([organizationId, spaceId, number]) // Parcela única por espacio
   @@index([ownerId])
   @@index([organizationId])
   @@index([spaceId])
+  @@index([districtId])
   @@index([status])
   @@index([parcelType])
   @@map("parcels")
 }
 
 enum ParcelType {
-  RESIDENTIAL     // Zona residencial
-  COMMERCIAL      // Zona comercial
-  INDUSTRIAL      // Zona industrial
-  MIXED_USE       // Uso mixto
-  PUBLIC_PARK     // Parque público
-  INFRASTRUCTURE  // Infraestructura (calles, servicios)
-  SPECIAL         // Uso especial
+  RESIDENTIAL // Zona residencial
+  COMMERCIAL // Zona comercial
+  INDUSTRIAL // Zona industrial
+  MIXED_USE // Uso mixto
+  PUBLIC_PARK // Parque público
+  INFRASTRUCTURE // Infraestructura (calles, servicios)
+  SPECIAL // Uso especial
 }
 
 enum ParcelStatus {
-  AVAILABLE       // Disponible para compra
-  RESERVED        // Reservada
-  OWNED           // Propiedad privada
+  AVAILABLE // Disponible para compra
+  RESERVED // Reservada
+  OWNED // Propiedad privada
   UNDER_CONSTRUCTION // En construcción
-  DEVELOPED       // Desarrollada
-  ABANDONED       // Abandonada
-  PUBLIC          // Propiedad pública
+  DEVELOPED // Desarrollada
+  ABANDONED // Abandonada
+  PUBLIC // Propiedad pública
 }
 
 enum BuildingType {
-  HOUSE           // Casa residencial
-  APARTMENT       // Edificio de apartamentos
-  OFFICE          // Oficina
-  SHOP            // Tienda
-  RESTAURANT      // Restaurante
-  WAREHOUSE       // Almacén
-  FACTORY         // Fábrica
-  SCHOOL          // Escuela
-  HOSPITAL        // Hospital
-  PARK            // Parque
-  PLAZA           // Plaza
-  PARKING         // Estacionamiento
-  CUSTOM          // Construcción personalizada
+  HOUSE // Casa residencial
+  APARTMENT // Edificio de apartamentos
+  OFFICE // Oficina
+  SHOP // Tienda
+  RESTAURANT // Restaurante
+  WAREHOUSE // Almacén
+  FACTORY // Fábrica
+  SCHOOL // Escuela
+  HOSPITAL // Hospital
+  PARK // Parque
+  PLAZA // Plaza
+  PARKING // Estacionamiento
+  CUSTOM // Construcción personalizada
 }

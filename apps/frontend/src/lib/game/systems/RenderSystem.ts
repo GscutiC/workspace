@@ -40,14 +40,17 @@ export class RenderSystem {
   public update(deltaTime: number, gameState: GameState): void {
     this.lastRenderTime = performance.now();
 
+    // Update avatar positions first
+    this.updateAvatarPositions(gameState);
+
     // Update avatar animations
     this.updateAvatarAnimations(deltaTime, gameState);
 
     // Update chat bubble timeouts
     this.updateChatBubbles(deltaTime);
 
-    // Cull off-screen objects for performance
-    this.performFrustumCulling(gameState);
+    // Cull off-screen objects for performance (disabled for debugging)
+    // this.performFrustumCulling(gameState);
   }
 
   /**
@@ -62,12 +65,14 @@ export class RenderSystem {
     avatarContainer.visible = true;
     avatarContainer.alpha = 1;
     avatarContainer.name = `Avatar_${avatar.id}`;
+    avatarContainer.zIndex = 100; // High z-index to ensure avatar is visible
     
     // Create animated avatar sprite
     const animatedSprite = this.animationSystem.createAnimatedAvatar(avatar);
     animatedSprite.name = `Sprite_${avatar.id}`;
     animatedSprite.visible = true;
     animatedSprite.alpha = 1;
+    animatedSprite.zIndex = 1;
     avatarContainer.addChild(animatedSprite);
 
     // Create name label
@@ -77,7 +82,7 @@ export class RenderSystem {
     nameLabel.x = AVATAR_CONFIG.nameOffset.x;
     nameLabel.visible = true;
     nameLabel.alpha = 1;
-    nameLabel.zIndex = 1000;
+    nameLabel.zIndex = 2;
     avatarContainer.addChild(nameLabel);
 
     // Create status indicator
@@ -87,6 +92,7 @@ export class RenderSystem {
     statusIndicator.y = AVATAR_CONFIG.statusOffset.y;
     statusIndicator.visible = true;
     statusIndicator.alpha = 1;
+    statusIndicator.zIndex = 2;
     avatarContainer.addChild(statusIndicator);
 
     // Position avatar container
@@ -122,6 +128,27 @@ export class RenderSystem {
     } else {
       console.error('❌ CHARACTERS layer not found!');
     }
+  }
+
+  /**
+   * Update avatar positions to match game state
+   */
+  private updateAvatarPositions(gameState: GameState): void {
+    gameState.avatars.forEach((avatar, userId) => {
+      const avatarContainer = this.avatarSprites.get(userId);
+      if (avatarContainer) {
+        // Update container position
+        avatarContainer.x = avatar.position.x;
+        avatarContainer.y = avatar.position.y;
+        
+        // Ensure container is visible
+        avatarContainer.visible = true;
+        avatarContainer.alpha = 1;
+        
+        // Update animation system position
+        this.animationSystem.updatePosition(userId, avatar.position);
+      }
+    });
   }
 
   /**

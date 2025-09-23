@@ -55,11 +55,8 @@ export class MovementSystem implements GameSystem {
    * Move avatar to specific position using pathfinding
    */
   public moveToPosition(userId: string, targetPosition: Position): boolean {
-    console.log('🚀 MovementSystem.moveToPosition called for', userId, 'to', targetPosition);
-    
     const avatar = this.gameState.avatars.get(userId);
     if (!avatar) {
-      console.error('❌ Avatar not found in MovementSystem:', userId);
       return false;
     }
 
@@ -276,18 +273,7 @@ export class MovementSystem implements GameSystem {
       // Only log when entering a new tile
       if (newTileX !== oldTileX || newTileY !== oldTileY) {
         const category = this.tileMap.getTileCategory(newTileX, newTileY);
-        const obstacles = this.tileMap.getObstaclesInArea({
-          x: newTileX - 1, y: newTileY - 1, width: 3, height: 3
-        });
-        
-        if (obstacles.length > 0) {
-          console.log('🏢 Nearby obstacles:', obstacles.map(o => ({
-            id: o.id,
-            type: o.metadata.type,
-            interactive: o.metadata.interactive
-          })));
-        }
-        
+        // Simplified tile logging
         console.log('📍 Entered tile:', { x: newTileX, y: newTileY, category });
       }
 
@@ -330,53 +316,25 @@ export class MovementSystem implements GameSystem {
    * Check if movement is valid (not blocked by obstacles) - Public for controller use
    */
   public isValidMove(from: Position, to: Position, avatarId?: string): boolean {
-    // FOCUSED DEBUG: Only log for UP movements (negative Y delta)
-    const isUpMovement = to.y < from.y;
-    
-    if (isUpMovement) {
-      console.log('🔍 VALIDATING UP MOVEMENT:');
-      console.log('  From:', from);
-      console.log('  To:', to);
-      console.log('  Delta Y:', to.y - from.y);
-    }
-    
     // Check boundaries
     const worldBounds = this.tileMap.getWorldBounds();
     
     if (to.x < 0 || to.x >= worldBounds.width || to.y < 0 || to.y >= worldBounds.height) {
-      if (isUpMovement) {
-        console.log('❌ UP MOVEMENT BLOCKED: OUT OF BOUNDS');
-        console.log('  Target position:', to);
-        console.log('  World bounds:', worldBounds);
-        console.log('  Y check: to.y=', to.y, '< 0?', to.y < 0);
-      }
       return false;
     }
 
     // Check if destination is walkable
     const isWalkable = this.tileMap.isWalkable(to);
     if (!isWalkable) {
-      if (isUpMovement) {
-        console.log('❌ UP MOVEMENT BLOCKED: NOT WALKABLE');
-        console.log('  Target position:', to);
-        console.log('  TileMap.isWalkable returned:', isWalkable);
-      }
       return false;
     }
 
     // Check collision with other avatars (excluding the moving avatar)
     const hasCollision = this.checkAvatarCollision(to, avatarId);
     if (hasCollision) {
-      if (isUpMovement) {
-        console.log('❌ UP MOVEMENT BLOCKED: AVATAR COLLISION');
-        console.log('  Target position:', to);
-      }
       return false;
     }
 
-    if (isUpMovement) {
-      console.log('✅ UP MOVEMENT VALIDATED - all checks passed');
-    }
     return true;
   }
 

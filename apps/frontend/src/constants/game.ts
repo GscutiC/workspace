@@ -13,12 +13,12 @@ export const GAME_CONFIG: GameConfig = {
 
 // Viewport Configuration
 export const VIEWPORT_CONFIG: ViewportConfig = {
-  worldWidth: 6400, // 200 * 32
-  worldHeight: 4800, // 150 * 32
-  minZoom: 0.3,
-  maxZoom: 2.5,
-  zoom: 0.8,
-  center: { x: 3200, y: 2400 },
+  worldWidth: 1200, // Canvas width (screen size)
+  worldHeight: 800, // Canvas height (screen size)
+  minZoom: 0.3, // Increased minimum zoom to prevent too much zoom out
+  maxZoom: 2.0, // Reduced maximum zoom for better control
+  zoom: 0.8, // Start with better zoom level to see content properly
+  center: { x: 3200, y: 2400 }, // Center of the world map
 };
 
 // Tile Configuration

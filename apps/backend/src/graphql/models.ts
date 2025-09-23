@@ -6,7 +6,26 @@ import {
   RoomType,
   SessionStatus,
   AchievementType,
+  DistrictType,
+  ParcelType,
+  ParcelStatus,
+  BuildingType,
 } from '@prisma/client';
+
+@ObjectType()
+export class Bounds {
+  @Field(() => Int)
+  x1: number;
+
+  @Field(() => Int)
+  y1: number;
+
+  @Field(() => Int)
+  x2: number;
+
+  @Field(() => Int)
+  y2: number;
+}
 
 // Register enums for GraphQL
 registerEnumType(MessageType, { name: 'MessageType' });
@@ -15,6 +34,10 @@ registerEnumType(SpaceTheme, { name: 'SpaceTheme' });
 registerEnumType(RoomType, { name: 'RoomType' });
 registerEnumType(SessionStatus, { name: 'SessionStatus' });
 registerEnumType(AchievementType, { name: 'AchievementType' });
+registerEnumType(DistrictType, { name: 'DistrictType' });
+registerEnumType(ParcelType, { name: 'ParcelType' });
+registerEnumType(ParcelStatus, { name: 'ParcelStatus' });
+registerEnumType(BuildingType, { name: 'BuildingType' });
 
 @ObjectType()
 export class User {
@@ -332,4 +355,169 @@ export class UserAchievement {
 
   @Field(() => User)
   user: User | null;
+}
+
+@ObjectType()
+export class District {
+  @Field(() => ID)
+  id: string;
+
+  @Field()
+  name: string;
+
+  @Field(() => String, { nullable: true })
+  description: string | null;
+
+  @Field(() => Bounds)
+  bounds: Bounds;
+
+  @Field(() => DistrictType)
+  districtType: DistrictType;
+
+  @Field()
+  color: string;
+
+  @Field()
+  zoneCode: string;
+
+  @Field(() => Number)
+  basePriceMultiplier: number;
+
+  @Field(() => Number)
+  taxRate: number;
+
+  @Field()
+  organizationId: string;
+
+  @Field()
+  spaceId: string;
+
+  @Field(() => [Parcel], { nullable: true })
+  parcels?: Parcel[];
+
+  @Field()
+  createdAt: Date;
+
+  @Field()
+  updatedAt: Date;
+}
+
+@ObjectType()
+export class Parcel {
+  @Field(() => ID)
+  id: string;
+
+  @Field(() => Int)
+  number: number;
+
+  @Field(() => String, { nullable: true })
+  name: string | null;
+
+  @Field(() => String, { nullable: true })
+  description: string | null;
+
+  @Field(() => Int)
+  x: number;
+
+  @Field(() => Int)
+  y: number;
+
+  @Field(() => Int)
+  width: number;
+
+  @Field(() => Int)
+  height: number;
+
+  @Field(() => ParcelType)
+  parcelType: ParcelType;
+
+  @Field(() => ParcelStatus)
+  status: ParcelStatus;
+
+  @Field(() => BuildingType, { nullable: true })
+  buildingType: BuildingType | null;
+
+  @Field(() => Number, { nullable: true })
+  basePrice: number | null;
+
+  @Field(() => Number, { nullable: true })
+  currentPrice: number | null;
+
+  @Field(() => Number, { nullable: true })
+  monthlyTax: number | null;
+
+  @Field(() => String, { nullable: true })
+  ownerId: string | null;
+
+  @Field()
+  organizationId: string;
+
+  @Field()
+  spaceId: string;
+
+  @Field(() => String, { nullable: true })
+  districtId: string | null;
+
+  @Field(() => District, { nullable: true })
+  district?: District | null;
+
+  @Field(() => String, { nullable: true })
+  mapConfig: string | null;
+
+  @Field(() => String, { nullable: true })
+  preset: string | null;
+
+  @Field()
+  createdAt: Date;
+
+  @Field()
+  updatedAt: Date;
+}
+
+@ObjectType()
+export class DistrictStats {
+  @Field(() => Int)
+  totalDistricts: number;
+
+  @Field(() => [DistrictTypeCount])
+  districtsByType: DistrictTypeCount[];
+
+  @Field(() => [DistrictStat])
+  stats: DistrictStat[];
+}
+
+@ObjectType()
+export class DistrictTypeCount {
+  @Field(() => DistrictType)
+  districtType: DistrictType;
+
+  @Field(() => Int)
+  _count: number;
+}
+
+@ObjectType()
+export class DistrictStat {
+  @Field(() => ID)
+  id: string;
+
+  @Field()
+  name: string;
+
+  @Field()
+  zoneCode: string;
+
+  @Field(() => DistrictType)
+  districtType: DistrictType;
+
+  @Field(() => Number)
+  basePriceMultiplier: number;
+
+  @Field(() => Int)
+  parcelCount: number;
+
+  @Field(() => Int)
+  avgPrice: number;
+
+  @Field(() => Int)
+  totalValue: number;
 }

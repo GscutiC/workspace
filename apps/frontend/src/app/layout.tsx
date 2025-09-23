@@ -1,8 +1,8 @@
 'use client';
 
-import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import Script from "next/script";
 import {
   ClerkProvider,
   SignInButton,
@@ -12,6 +12,7 @@ import {
   UserButton,
 } from "@clerk/nextjs";
 import { useState } from "react";
+import { QueryProvider } from "@/components/QueryProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,6 +35,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
+        <head></head>
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
@@ -61,7 +63,7 @@ export default function RootLayout({
 
               {/* Logo/Brand */}
               <div className="p-6 border-b border-gray-700">
-                <Link href="/" className={`text-2xl font-bold text-white hover:text-indigo-400 transition-colors ${sidebarCollapsed ? 'text-center' : ''}`}>
+                <Link href="/" className={`text-2xl font-bold text-white hover:text-indigo-400 transition-colors ${sidebarCollapsed ? 'text-center' : ''}`} suppressHydrationWarning translate="no">
                   {sidebarCollapsed ? 'M' : 'Mercado'}
                 </Link>
               </div>
@@ -152,9 +154,17 @@ export default function RootLayout({
 
             {/* Main Content Area */}
             <main className="flex-1 overflow-hidden">
-              {children}
+              <QueryProvider>
+                {children}
+              </QueryProvider>
             </main>
           </div>
+
+          {/* Async script for parcel testing functions */}
+          <Script
+            src="/parcel-test-functions.js"
+            strategy="afterInteractive"
+          />
         </body>
       </html>
     </ClerkProvider>

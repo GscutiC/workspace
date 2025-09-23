@@ -43,18 +43,20 @@ export class Viewport {
    * Move camera to specific world position
    */
   public moveTo(worldPos: Position, immediate: boolean = false): void {
+    console.log('📷 Viewport.moveTo called:', { worldPos, immediate, currentState: this.state });
+    
     const targetX = this.clampX(worldPos.x);
     const targetY = this.clampY(worldPos.y);
 
-    if (immediate) {
-      this.state.x = targetX;
-      this.state.y = targetY;
-      this.applyTransform();
-    } else {
-      // Set target for smooth movement
-      this.state.x = targetX;
-      this.state.y = targetY;
-    }
+    console.log('📷 Clamped target position:', { targetX, targetY });
+
+    this.state.x = targetX;
+    this.state.y = targetY;
+    
+    // Always apply transform immediately for now to debug
+    this.applyTransform();
+    
+    console.log('📷 Viewport moved to:', { x: targetX, y: targetY });
   }
 
   /**
@@ -259,8 +261,29 @@ export class Viewport {
     const newX = centerX - this.state.x * this.state.zoom;
     const newY = centerY - this.state.y * this.state.zoom;
 
+    console.log('📷 Applying viewport transform:', {
+      state: this.state,
+      newScale,
+      newPosition: { x: newX, y: newY },
+      worldContainerBefore: {
+        x: this.worldContainer.x,
+        y: this.worldContainer.y,
+        scaleX: this.worldContainer.scale.x,
+        scaleY: this.worldContainer.scale.y
+      }
+    });
+
     this.worldContainer.scale.set(newScale);
     this.worldContainer.position.set(newX, newY);
+
+    console.log('📷 Viewport transform applied:', {
+      worldContainerAfter: {
+        x: this.worldContainer.x,
+        y: this.worldContainer.y,
+        scaleX: this.worldContainer.scale.x,
+        scaleY: this.worldContainer.scale.y
+      }
+    });
   }
 
   /**
@@ -272,24 +295,38 @@ export class Viewport {
   }
 
   /**
-   * Clamp X position to world bounds
+   * Clamp X position to world bounds with better boundary handling
    */
   private clampX(x: number): number {
     const halfViewWidth = (this.config.worldWidth / 2) / this.state.zoom;
-    const minX = halfViewWidth;
-    const maxX = this.bounds.width - halfViewWidth;
-
+    
+    // Ensure camera can't go beyond map boundaries
+    const minX = Math.max(halfViewWidth, 0 + halfViewWidth);
+    const maxX = Math.min(this.bounds.width - halfViewWidth, this.bounds.width - halfViewWidth);
+    
+    // If map is smaller than viewport, center it
+    if (this.bounds.width < this.config.worldWidth / this.state.zoom) {
+      return this.bounds.width / 2;
+    }
+    
     return Math.max(minX, Math.min(maxX, x));
   }
 
   /**
-   * Clamp Y position to world bounds
+   * Clamp Y position to world bounds with better boundary handling
    */
   private clampY(y: number): number {
     const halfViewHeight = (this.config.worldHeight / 2) / this.state.zoom;
-    const minY = halfViewHeight;
-    const maxY = this.bounds.height - halfViewHeight;
-
+    
+    // Ensure camera can't go beyond map boundaries
+    const minY = Math.max(halfViewHeight, 0 + halfViewHeight);
+    const maxY = Math.min(this.bounds.height - halfViewHeight, this.bounds.height - halfViewHeight);
+    
+    // If map is smaller than viewport, center it
+    if (this.bounds.height < this.config.worldHeight / this.state.zoom) {
+      return this.bounds.height / 2;
+    }
+    
     return Math.max(minY, Math.min(maxY, y));
   }
 
@@ -306,6 +343,50 @@ export class Viewport {
    */
   private clampZoom(zoom: number): number {
     return Math.max(this.config.minZoom, Math.min(this.config.maxZoom, zoom));
+  }
+
+  /**
+   * Center the viewport to show the entire map optimally
+   */
+  public centerOnMap(): void {
+    // Calculate the optimal zoom to fit the entire map
+    const scaleX = this.config.worldWidth / this.bounds.width;
+    const scaleY = this.config.worldHeight / this.bounds.height;
+    const optimalZoom = Math.min(scaleX, scaleY) * 0.9; // 90% to leave some margin
+    
+    // Clamp the zoom to our limits
+    const newZoom = this.clampZoom(optimalZoom);
+    
+    // Center the map
+    const centerX = this.bounds.width / 2;
+    const centerY = this.bounds.height / 2;
+    
+    console.log('📷 Centering on map:', {
+      bounds: this.bounds,
+      viewport: { width: this.config.worldWidth, height: this.config.worldHeight },
+      optimalZoom,
+      newZoom,
+      center: { x: centerX, y: centerY }
+    });
+    
+    this.state.zoom = newZoom;
+    this.state.x = centerX;
+    this.state.y = centerY;
+    
+    this.applyTransform();
+  }
+
+  /**
+   * Fit the map to viewport (alternative to centerOnMap)
+   */
+  public fitToViewport(): void {
+    // Calculate zoom to fit map in viewport
+    const zoomX = this.config.worldWidth / this.bounds.width;
+    const zoomY = this.config.worldHeight / this.bounds.height;
+    const fitZoom = Math.max(zoomX, zoomY) * 1.1; // 110% to ensure full coverage
+    
+    this.setZoom(this.clampZoom(fitZoom));
+    this.moveTo({ x: this.bounds.width / 2, y: this.bounds.height / 2 });
   }
 
   /**
