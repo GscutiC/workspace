@@ -27,13 +27,40 @@ export class MinimapSystem {
   // Colors for minimap
   private readonly COLORS = {
     BACKGROUND: 0x2D3748,
+    
+    // Áreas caminables - Urban tiles
+    STREET: 0x808080, // Gris
+    SIDEWALK: 0xC0C0C0, // Gris plateado
+    PARK_PATH: 0xD2B48C, // Tan claro
+    PARK_GRASS: 0x90EE90, // Verde claro
+    
+    // Edificios
+    OFFICE_BUILDING: 0x4169E1, // Azul real
+    RESIDENTIAL_BUILDING: 0xB22222, // Rojo ladrillo
+    COMMERCIAL_BUILDING: 0x32CD32, // Verde lima
+    BUILDING: 0x4169E1, // Azul real (genérico)
+    
+    // Naturaleza
+    TREE: 0x006400, // Verde oscuro
+    FOUNTAIN: 0x00CED1, // Turquesa oscuro
+    PLANT: 0x16A34A, // Verde legacy
+    WATER: 0x1E90FF, // Azul profundo para agua
+    
+    // Mobiliario urbano
+    STREET_LIGHT: 0xFFD700, // Dorado
+    TRAFFIC_LIGHT: 0xFF4500, // Rojo naranja
+    ROAD_SIGN: 0xFFD700, // Dorado
+    PARK_BENCH: 0x8B4513, // Marrón
+    
+    // Tipos de oficina legacy (para compatibilidad)
     FLOOR: 0xF7FAFC,
     WALL: 0x4A5568,
     DESK: 0x92400E,
     CHAIR: 0x1F2937,
-    PLANT: 0x16A34A,
     DOOR: 0x7C2D12,
     WINDOW: 0x0EA5E9,
+    
+    // Special colors
     AVATAR_SELF: 0xEF4444,
     AVATAR_OTHER: 0x3B82F6,
     VIEWPORT: 0xFBBF24,
@@ -137,7 +164,7 @@ export class MinimapSystem {
       event.data.originalEvent.preventDefault();
       
       const localPoint = event.data.getLocalPosition(this.container);
-      const nativeEvent = event.data.originalEvent as any;
+      const nativeEvent = event.data.originalEvent as unknown as MouseEvent;
       const button = nativeEvent.button || 0; // Default to left click if button is undefined
       
       // Convert minimap coordinates to world coordinates
@@ -226,6 +253,63 @@ export class MinimapSystem {
     
     let color: number;
     switch (tile.type) {
+      // Áreas caminables - Urban tiles
+      case TileType.STREET:
+        color = this.COLORS.STREET;
+        break;
+      case TileType.SIDEWALK:
+        color = this.COLORS.SIDEWALK;
+        break;
+      case TileType.PARK_PATH:
+        color = this.COLORS.PARK_PATH;
+        break;
+      case TileType.PARK_GRASS:
+        color = this.COLORS.PARK_GRASS;
+        break;
+        
+      // Edificios
+      case TileType.OFFICE_BUILDING:
+        color = this.COLORS.OFFICE_BUILDING;
+        break;
+      case TileType.RESIDENTIAL_BUILDING:
+        color = this.COLORS.RESIDENTIAL_BUILDING;
+        break;
+      case TileType.COMMERCIAL_BUILDING:
+        color = this.COLORS.COMMERCIAL_BUILDING;
+        break;
+      case TileType.BUILDING:
+        color = this.COLORS.BUILDING;
+        break;
+        
+      // Naturaleza
+      case TileType.TREE:
+        color = this.COLORS.TREE;
+        break;
+      case TileType.FOUNTAIN:
+        color = this.COLORS.FOUNTAIN;
+        break;
+      case TileType.PLANT:
+        color = this.COLORS.PLANT;
+        break;
+      case TileType.WATER:
+        color = this.COLORS.WATER;
+        break;
+        
+      // Mobiliario urbano
+      case TileType.STREET_LIGHT:
+        color = this.COLORS.STREET_LIGHT;
+        break;
+      case TileType.TRAFFIC_LIGHT:
+        color = this.COLORS.TRAFFIC_LIGHT;
+        break;
+      case TileType.ROAD_SIGN:
+        color = this.COLORS.ROAD_SIGN;
+        break;
+      case TileType.PARK_BENCH:
+        color = this.COLORS.PARK_BENCH;
+        break;
+        
+      // Tipos de oficina legacy
       case TileType.FLOOR:
         color = this.COLORS.FLOOR;
         break;
@@ -238,17 +322,16 @@ export class MinimapSystem {
       case TileType.CHAIR:
         color = this.COLORS.CHAIR;
         break;
-      case TileType.PLANT:
-        color = this.COLORS.PLANT;
-        break;
       case TileType.DOOR:
         color = this.COLORS.DOOR;
         break;
       case TileType.WINDOW:
         color = this.COLORS.WINDOW;
         break;
+        
       default:
-        color = this.COLORS.FLOOR;
+        // Default to street color for unknown types
+        color = this.COLORS.STREET;
     }
     
     this.mapGraphics

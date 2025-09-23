@@ -5,8 +5,19 @@ import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { GameEngine } from '@/lib/game/GameEngine';
 import { useAvatarConfig } from '@/hooks/useAvatarConfig';
+import { RealParcelManager } from '@/components/RealParcelManager';
+import { ParcelInfoPanel } from '@/components/ParcelInfoPanel';
+import { ParcelInfo } from '@/lib/game/generators/CityGenerator';
 import type { AvatarData } from '@/types/game';
 import { UserStatus } from '@/types/game';
+
+interface ParcelData extends ParcelInfo {
+  id?: string;
+  status: 'available' | 'reserved' | 'sold' | 'maintenance';
+  price?: number;
+  owner?: string;
+  lastModified?: Date;
+}
 
 /**
  * VirtualOffice component - Main React component for the 2D virtual office
@@ -35,6 +46,11 @@ export function VirtualOffice() {
   const [connectedUsers, setConnectedUsers] = useState<AvatarData[]>([]);
   const [currentUserId] = useState<string>(() => user?.id || `user-${Date.now()}`);
 
+  // Parcel management state
+  const [showParcelManager, setShowParcelManager] = useState(false);
+  const [selectedParcel, setSelectedParcel] = useState<ParcelData | null>(null);
+  const [parcels, setParcels] = useState<ParcelInfo[]>([]);
+  const [showParcelInfo, setShowParcelInfo] = useState(false);
   /**
    * Add a real user to the virtual office (would be called via WebSocket)
    */
@@ -49,277 +65,299 @@ export function VirtualOffice() {
 
     const gameEngine = gameEngineRef.current;
     
-    console.log('👤 Adding real user to virtual office:', userData.name);
-    gameEngine.addUser({
+    // Check if user already exists
+    const existingUser = connectedUsers.find(u => u.id === userData.id);
+    if (existingUser) return;
+
+    // Add avatar to game
+    const avatarData: Omit<AvatarData, 'position' | 'direction'> = {
       id: userData.id,
       name: userData.name,
-      color: userData.color || 0x4F46E5,
       avatar: userData.avatar || 'default',
-      status: userData.status || UserStatus.AVAILABLE,
-    });
-
-    // Update connected users state
-    setConnectedUsers(gameEngine.getAllAvatars());
-  }, []);
-
-  /**
-   * Remove a user from the virtual office (would be called via WebSocket)
-   */
-  const removeRealUser = useCallback((userId: string) => {
-    if (!gameEngineRef.current) return;
-
-    const gameEngine = gameEngineRef.current;
-    
-    console.log('👤 Removing user from virtual office:', userId);
-    gameEngine.removeUser(userId);
-
-    // Update connected users state
-    setConnectedUsers(gameEngine.getAllAvatars());
-  }, []);
-
-  /**
-   * Initialize the game engine
-   */
-  const initializeGame = useCallback(async () => {
-    if (!canvasRef.current || gameEngineRef.current || !userLoaded) return;
-
-    try {
-      console.log('🎮 Initializing Virtual Office...');
-      
-      // Create game engine
-      const gameEngine = new GameEngine();
-      gameEngineRef.current = gameEngine;
-
-      // Initialize with canvas
-      await gameEngine.init(canvasRef.current);
-
-      // Start the game
-      await gameEngine.start();
-
-      // Get player configuration (prioritize saved config, fallback to user data)
-      let playerName = user?.fullName || user?.firstName || 'Usuario';
-      let playerColor = 0x4F46E5;
-      let playerAvatar = 'default';
-      
-      if (avatarConfig) {
-        playerName = avatarConfig.name || playerName;
-        playerColor = avatarConfig.color || playerColor;
-        playerAvatar = avatarConfig.avatar || playerAvatar;
-        console.log('🎨 Using saved avatar configuration');
-      }
-
-      // Add initial user (player)
-      const playerAvatarData = gameEngine.addUser({
-        id: currentUserId,
-        name: playerName,
-        color: playerColor,
-        avatar: playerAvatar,
-        status: UserStatus.AVAILABLE,
-      });
-
-      // Set as current user
-      gameEngine.setCurrentUser(currentUserId);
-
-      // Update connected users state
-      setConnectedUsers(gameEngine.getAllAvatars());
-
-      setIsInitialized(true);
-      console.log('✅ Virtual Office initialized successfully');
-      
-      // Auto-center on avatar after initialization
-      setTimeout(() => {
-        const avatar = gameEngine.getAvatar(currentUserId);
-        if (avatar) {
-          const viewport = gameEngine.getViewport();
-          viewport.moveTo(avatar.position, true);
-        }
-      }, 500);
-      
-    } catch (error) {
-      console.error('❌ Error initializing Virtual Office:', error);
-    }
-  }, [userLoaded, user, avatarConfig, currentUserId]);
-
-  /**
-   * Handle window resize
-   */
-  const handleResize = useCallback(() => {
-    if (!gameEngineRef.current || !containerRef.current) return;
-
-    const container = containerRef.current;
-    const rect = container.getBoundingClientRect();
-
-    gameEngineRef.current.resize(rect.width, rect.height);
-  }, []);
-
-  /**
-   * Setup resize observer
-   */
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(containerRef.current);
-
-    // Initial resize
-    handleResize();
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [handleResize]);
-
-  /**
-   * Initialize game when component mounts
-   */
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-
-    const init = async () => {
-      // Small delay to ensure canvas is properly mounted
-      timeoutId = setTimeout(async () => {
-        await initializeGame();
-        setIsLoaded(true);
-      }, 100);
+      color: userData.color || 0x4287f5,
+      status: userData.status || UserStatus.AVAILABLE
     };
 
-    init();
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [initializeGame]);
-
-  /**
-   * Listen for avatar configuration changes and update current user
-   */
-  useEffect(() => {
-    const handleAvatarConfigChange = (event: CustomEvent) => {
-      const newConfig = event.detail;
-      if (!gameEngineRef.current || !isInitialized) return;
-
-      console.log('🎨 Avatar config changed, updating current user:', newConfig);
-      
-      const gameEngine = gameEngineRef.current;
-      const currentUser = gameEngine.getAvatar(currentUserId);
-      
-      if (currentUser) {
-        // Update the current user's avatar in the game
-        const updatedUser = {
-          ...currentUser,
-          name: newConfig.name || currentUser.name,
-          color: newConfig.color || currentUser.color,
-          avatar: newConfig.avatar || currentUser.avatar
-        };
-        
-        // Remove and re-add user with new configuration
-        gameEngine.removeUser(currentUserId);
-        gameEngine.addUser(updatedUser);
-        gameEngine.setCurrentUser(currentUserId);
-        
-        // Update connected users state
-        setConnectedUsers(gameEngine.getAllAvatars());
-        
-        console.log('✅ Current user avatar updated in real-time');
-      }
-    };
-
-    window.addEventListener('avatarConfigChanged', handleAvatarConfigChange as EventListener);
-    
-    return () => {
-      window.removeEventListener('avatarConfigChanged', handleAvatarConfigChange as EventListener);
-    };
-  }, [currentUserId, isInitialized]);
-
-  /**
-   * Cleanup on unmount
-   */
-  useEffect(() => {
-    return () => {
-      if (gameEngineRef.current) {
-        gameEngineRef.current.destroy();
-        gameEngineRef.current = null;
-      }
-    };
-  }, []);
-
-  /**
-   * Send chat message
-   */
-  const sendMessage = useCallback((message: string) => {
-    if (!gameEngineRef.current || !message.trim()) return;
-
-    gameEngineRef.current.sendChatMessage(currentUserId, message.trim());
-
-    // Update connected users to reflect new message
-    setConnectedUsers(gameEngineRef.current.getAllAvatars());
-  }, [currentUserId]);
+    const fullAvatarData = gameEngine.addUser(avatarData);
+    setConnectedUsers(prev => [...prev, fullAvatarData]);
+  }, [connectedUsers]);
 
   /**
    * Update user status
    */
   const updateStatus = useCallback((status: UserStatus) => {
     if (!gameEngineRef.current) return;
-
-    gameEngineRef.current.updateAvatarStatus(currentUserId, status);
-    setConnectedUsers(gameEngineRef.current.getAllAvatars());
+    
+    setConnectedUsers(prev => 
+      prev.map(user => 
+        user.id === currentUserId 
+          ? { ...user, status }
+          : user
+      )
+    );
   }, [currentUserId]);
 
   /**
-   * Toggle debug mode
+   * Send chat message
+   */
+  const sendMessage = useCallback((message: string) => {
+    if (!gameEngineRef.current || !message.trim()) return;
+    
+    console.log('💬 Chat message:', { user: currentUserId, message });
+    // Here you would typically send to WebSocket
+  }, [currentUserId]);
+
+  /**
+   * Center camera on current user's avatar
+   */
+  const centerOnAvatar = useCallback(() => {
+    if (!gameEngineRef.current) return;
+    
+    const gameEngine = gameEngineRef.current;
+    const avatar = gameEngine.getGameState().avatars.get(currentUserId);
+    if (!avatar) return;
+    
+    // Center the viewport on the avatar
+    gameEngine.getViewport().moveTo(avatar.position, true);
+  }, [currentUserId]);
+
+  /**
+   * Toggle debug overlay
    */
   const toggleDebug = useCallback(() => {
     if (!gameEngineRef.current) return;
-
-    const gameEngine = gameEngineRef.current;
-    
-    // Toggle debug mode on tilemap
-    gameEngine.toggleDebugMode();
-    
-    // Get comprehensive debug information
-    const debugInfo = gameEngine.getDebugInfo();
-    console.log('🐛 COMPREHENSIVE DEBUG INFO:');
-    console.log('🐛 Game State:', debugInfo.gameState);
-    console.log('🐛 Layers:', debugInfo.layers);
-    console.log('🐛 Systems:', debugInfo.systems);
-    console.log('🐛 Avatars:', debugInfo.avatars);
-    console.log('🐛 World Container:', debugInfo.worldContainer);
-    console.log('🐛 Character Layer:', debugInfo.characterLayer);
-    
-    // Also log viewport information
-    const viewport = gameEngine.getViewport();
-    const viewportState = viewport.getState();
-    console.log('🐛 Viewport State:', viewportState);
-    
-    // Force a manual check of the character layer
-    const allAvatars = gameEngine.getAllAvatars();
-    console.log('🐛 All avatars from GameEngine:', allAvatars);
-    
-    alert('Debug information logged to console. Open DevTools to see details.');
+    gameEngineRef.current.toggleDebugMode();
   }, []);
 
   /**
-   * Force center camera on current user avatar
+   * Toggle parcel numbering overlay
    */
-  const centerOnAvatar = useCallback(() => {
-    if (!gameEngineRef.current || !currentUserId) return;
-
-    const gameEngine = gameEngineRef.current;
-    const avatar = gameEngine.getAvatar(currentUserId);
-    
-    if (avatar) {
-      console.log(`🎯 Centering camera on ${avatar.name} at (${avatar.position.x}, ${avatar.position.y})`);
-      
-      // Center viewport on avatar
-      const viewport = gameEngine.getViewport();
-      viewport.moveTo(avatar.position, true);
-    } else {
-      console.error('❌ No avatar found for current user:', currentUserId);
-    }
-  }, [currentUserId]);
+  const toggleParcels = useCallback(() => {
+    if (!gameEngineRef.current) return;
+    gameEngineRef.current.toggleParcels();
+  }, []);
 
   /**
-   * Move to specific position (for demo purposes)
+   * Toggle parcel management panel
+   */
+  const toggleParcelManager = useCallback(() => {
+    setShowParcelManager(!showParcelManager);
+    
+    // Load parcels when opening the manager
+    if (!showParcelManager && gameEngineRef.current) {
+      const tileMap = gameEngineRef.current.getTileMap();
+      if (tileMap && typeof tileMap.getParcels === 'function') {
+        const mapParcels = tileMap.getParcels();
+        setParcels(mapParcels);
+      }
+    }
+  }, [showParcelManager]);
+
+  /**
+   * Handle parcel selection
+   */
+  const handleParcelSelect = useCallback((parcel: ParcelData) => {
+    setSelectedParcel(parcel);
+    setShowParcelInfo(true);
+  }, []);
+
+  /**
+   * Handle parcel update
+   */
+  const handleParcelUpdate = useCallback((updatedParcel: ParcelData) => {
+    setParcels(prev => 
+      prev.map(p => p.number === updatedParcel.number ? updatedParcel : p)
+    );
+    setSelectedParcel(updatedParcel);
+  }, []);
+
+  /**
+   * Handle parcel status change
+   */
+  const handleParcelStatusChange = useCallback((status: ParcelData['status']) => {
+    if (selectedParcel) {
+      const updatedParcel = { ...selectedParcel, status };
+      handleParcelUpdate(updatedParcel);
+    }
+  }, [selectedParcel, handleParcelUpdate]);
+
+  /**
+   * Initialize the game engine
+   */
+  useEffect(() => {
+    if (!userLoaded || !avatarConfig || isInitialized) return;
+
+    const initializeGame = async () => {
+      try {
+        const gameEngine = new GameEngine();
+        
+        if (!containerRef.current) {
+          console.error('❌ Container ref not available');
+          return;
+        }
+
+        // Create canvas element
+        const canvas = document.createElement('canvas');
+        containerRef.current.appendChild(canvas);
+
+        console.log('🎮 Initializing game engine...');
+        await gameEngine.init(canvas);
+        
+        gameEngineRef.current = gameEngine;
+
+        // Add current user avatar 
+        const userName = user?.firstName || user?.username || `User-${currentUserId.slice(-4)}`;
+        const currentUserData: Omit<AvatarData, 'position' | 'direction'> = {
+          id: currentUserId,
+          name: userName,
+          avatar: avatarConfig.name || 'default',
+          color: avatarConfig.color || 0x4287f5,
+          status: UserStatus.AVAILABLE
+        };
+
+        console.log('👤 Adding current user:', currentUserData);
+        const fullCurrentUserData = gameEngine.addUser(currentUserData);
+        setConnectedUsers([fullCurrentUserData]);
+
+        // Set this as the current user for the game engine
+        gameEngine.setCurrentUser(currentUserId);
+        console.log('✅ Current user set in game engine:', currentUserId);
+
+        // Add some demo users for testing
+        setTimeout(() => {
+          addRealUser({
+            id: 'demo-user-1',
+            name: 'Demo User 1',
+            color: 0xff6b6b,
+            status: UserStatus.AVAILABLE
+          });
+          
+          addRealUser({
+            id: 'demo-user-2', 
+            name: 'Demo User 2',
+            color: 0x4ecdc4,
+            status: UserStatus.BUSY
+          });
+        }, 2000);
+
+        setIsInitialized(true);
+        setIsLoaded(true);
+        
+        console.log('✅ Game initialization complete');
+      } catch (error) {
+        console.error('❌ Failed to initialize game:', error);
+      }
+    };
+
+    initializeGame();
+
+    // Cleanup function
+    return () => {
+      console.log('🧹 Cleaning up game engine...');
+      if (gameEngineRef.current) {
+        // GameEngine might not have explicit cleanup method
+        console.log('🧹 Game engine cleaned up');
+        gameEngineRef.current = null;
+      }
+    };
+  }, [userLoaded, avatarConfig, currentUserId, user, addRealUser, isInitialized]);
+
+  /**
+   * Handle canvas resize
+   */
+  useEffect(() => {
+    if (!isInitialized || !gameEngineRef.current) return;
+
+    const handleResize = () => {
+      if (gameEngineRef.current && containerRef.current) {
+        console.log('📏 Resizing game canvas...');
+        const { clientWidth, clientHeight } = containerRef.current;
+        gameEngineRef.current.resize(clientWidth, clientHeight);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    
+    // Initial resize
+    handleResize();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isInitialized]);
+
+  /**
+   * Start game loop after initialization
+   */
+  useEffect(() => {
+    if (!isInitialized || !gameEngineRef.current) return;
+
+    const gameEngine = gameEngineRef.current;
+    
+    // Ensure the game loop starts only once
+    if (!gameEngine.getGameState().isRunning) {
+      gameEngine.start();
+    }
+
+    return () => {
+      if (gameEngine.getGameState().isRunning) {
+        gameEngine.stop();
+      }
+    };
+  }, [isInitialized]);
+
+  /**
+   * Keyboard controls setup
+   */
+  useEffect(() => {
+    if (!isInitialized || !gameEngineRef.current) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!gameEngineRef.current) return;
+
+      const moveDistance = 32; // One tile
+      const gameEngine = gameEngineRef.current;
+      const currentUser = connectedUsers.find(u => u.id === currentUserId);
+      
+      if (!currentUser) return;
+
+      let newX = currentUser.position.x;
+      let newY = currentUser.position.y;
+
+      switch (event.key.toLowerCase()) {
+        case 'w':
+        case 'arrowup':
+          newY -= moveDistance;
+          break;
+        case 's':
+        case 'arrowdown':
+          newY += moveDistance;
+          break;
+        case 'a':
+        case 'arrowleft':
+          newX -= moveDistance;
+          break;
+        case 'd':
+        case 'arrowright':
+          newX += moveDistance;
+          break;
+        default:
+          return; // Don't prevent default for other keys
+      }
+
+      event.preventDefault();
+      gameEngine.moveAvatar(currentUserId, { x: newX, y: newY });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isInitialized, connectedUsers, currentUserId]);
+
+  /**
+   * Move to specific position (for testing)
    */
   const moveToPosition = useCallback((x: number, y: number) => {
     if (!gameEngineRef.current) return;
@@ -334,18 +372,10 @@ export function VirtualOffice() {
         className="absolute inset-0 w-full h-full"
         style={{ touchAction: 'none' }} // Prevent touch scrolling
       >
-        <canvas
-          ref={canvasRef}
-          className="block w-full h-full"
-          style={{
-            display: 'block',
-            outline: 'none',
-          }}
-          tabIndex={0} // Make canvas focusable for keyboard input
-        />
+        {/* Canvas will be injected here by Pixi.js */}
       </div>
 
-      {/* Loading Overlay */}
+      {/* Loading State */}
       {!isLoaded && (
         <div className="absolute inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-10">
           <div className="bg-white rounded-lg p-6 text-center">
@@ -355,136 +385,85 @@ export function VirtualOffice() {
         </div>
       )}
 
-      {/* Controls UI */}
+      {/* User Info and Connected Users - Always visible */}
       {isInitialized && (
-        <>
-          {/* Top Controls */}
-          <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-20">
-            {/* Status Controls */}
-            <div className="bg-white rounded-lg shadow-lg p-3">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Your Status</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => updateStatus(UserStatus.AVAILABLE)}
-                  className="px-3 py-1 rounded text-xs bg-green-100 text-green-800 hover:bg-green-200"
-                >
-                  Available
-                </button>
-                <button
-                  onClick={() => updateStatus(UserStatus.BUSY)}
-                  className="px-3 py-1 rounded text-xs bg-red-100 text-red-800 hover:bg-red-200"
-                >
-                  Busy
-                </button>
-                <button
-                  onClick={() => updateStatus(UserStatus.AWAY)}
-                  className="px-3 py-1 rounded text-xs bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                >
-                  Away
-                </button>
-              </div>
-            </div>
-
-            {/* Chat Input */}
-            <div className="bg-white rounded-lg shadow-lg p-3 max-w-xs">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  const message = formData.get('message') as string;
-                  sendMessage(message);
-                  e.currentTarget.reset();
-                }}
-              >
-                <div className="flex gap-2">
-                  <input
-                    name="message"
-                    type="text"
-                    placeholder="Say something..."
-                    className="flex-1 px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    maxLength={100}
+        <div className="absolute bottom-4 left-4 flex gap-4 z-20">
+          {/* Connected Users */}
+          <div className="bg-white rounded-lg shadow-lg p-3 max-w-xs">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">
+              Connected Users ({connectedUsers.length})
+            </h3>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {connectedUsers.map((user) => (
+                <div key={user.id} className="flex items-center gap-2 text-xs">
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      user.status === UserStatus.AVAILABLE ? 'bg-green-500' :
+                      user.status === UserStatus.BUSY ? 'bg-red-500' :
+                      user.status === UserStatus.AWAY ? 'bg-yellow-500' :
+                      'bg-gray-500'
+                    }`}
                   />
-                  <button
-                    type="submit"
-                    className="px-3 py-1 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700"
-                  >
-                    Send
-                  </button>
+                  <span className="truncate">{user.name}</span>
+                  {user.id === currentUserId && (
+                    <span className="text-gray-500">(You)</span>
+                  )}
                 </div>
-              </form>
+              ))}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Bottom Controls */}
-          <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end z-20">
-            {/* Connected Users */}
-            <div className="bg-white rounded-lg shadow-lg p-3 max-w-xs">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Connected Users ({connectedUsers.length})
-              </h3>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {connectedUsers.map((user) => (
-                  <div key={user.id} className="flex items-center gap-2 text-xs">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        user.status === UserStatus.AVAILABLE ? 'bg-green-500' :
-                        user.status === UserStatus.BUSY ? 'bg-red-500' :
-                        user.status === UserStatus.AWAY ? 'bg-yellow-500' :
-                        'bg-gray-500'
-                      }`}
-                    />
-                    <span className="truncate">{user.name}</span>
-                    {user.id === currentUserId && (
-                      <span className="text-gray-500">(You)</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Controls */}
-            <div className="bg-white rounded-lg shadow-lg p-3">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => router.push('/virtual-office/lobby')}
-                  className="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"
-                >
-                  Configurar Avatar
-                </button>
-                <button
-                  onClick={centerOnAvatar}
-                  className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
-                >
-                  Find Avatar
-                </button>
-                <button
-                  onClick={toggleDebug}
-                  className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"
-                >
-                  Debug
-                </button>
-                <button
-                  onClick={() => moveToPosition(400, 300)}
-                  className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-                >
-                  Center
-                </button>
-              </div>
+      {/* Essential Controls - Always visible */}
+      {isInitialized && (
+        <div className="absolute bottom-4 right-4 z-20">
+          <div className="bg-white rounded-lg shadow-lg p-3">
+            <div className="flex gap-2">
+              <button
+                onClick={centerOnAvatar}
+                className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+              >
+                Find Avatar
+              </button>
+              <button
+                onClick={toggleDebug}
+                className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"
+              >
+                Debug
+              </button>
+              <button
+                onClick={toggleParcels}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+              >
+                Parcelas
+              </button>
+              <button
+                onClick={toggleParcelManager}
+                className="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"
+              >
+                Admin
+              </button>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Instructions */}
-          <div className="absolute top-4 right-4 bg-black bg-opacity-75 text-white text-xs p-3 rounded-lg max-w-xs z-20">
-            <h4 className="font-medium mb-1">Controls</h4>
-            <ul className="space-y-1 text-xs">
-              <li>• Click to move your avatar</li>
-              <li>• Use WASD or arrow keys</li>
-              <li>• Mouse wheel to zoom</li>
-              <li>• Drag to pan the camera</li>
-              <li>• Type messages to chat</li>
-            </ul>
-          </div>
-        </>
+      {/* Parcel Management Panel */}
+      {showParcelManager && (
+        <div className="absolute top-0 left-0 w-2/3 h-full z-20 bg-white shadow-xl overflow-y-auto">
+          <RealParcelManager />
+        </div>
+      )}
+
+      {/* Parcel Information Panel */}
+      {showParcelInfo && selectedParcel && (
+        <ParcelInfoPanel
+          parcel={selectedParcel}
+          onClose={() => setShowParcelInfo(false)}
+          onUpdate={handleParcelUpdate}
+          onStatusChange={handleParcelStatusChange}
+        />
       )}
     </div>
   );

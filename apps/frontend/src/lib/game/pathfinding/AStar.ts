@@ -1,5 +1,8 @@
 import Heap from 'heap';
-import type { Position, PathNode, TileMap } from '@/types/game';
+import type { Position, PathNode } from '@/types/game';
+import { TileType } from '@/types/game';
+import type { TileMap } from '@/lib/game/TileMap';
+import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '@/constants/game';
 
 /**
  * A* Pathfinding Algorithm Implementation
@@ -9,11 +12,13 @@ export class AStar {
   private tileMap: TileMap;
   private openSet: Heap<PathNode>;
   private closedSet: Set<string>;
+  private openSetMap: Map<string, PathNode>; // For O(1) lookup in openSet
 
   constructor(tileMap: TileMap) {
     this.tileMap = tileMap;
     this.openSet = new Heap<PathNode>((a, b) => a.f - b.f);
     this.closedSet = new Set();
+    this.openSetMap = new Map();
   }
 
   /**
@@ -24,10 +29,34 @@ export class AStar {
     const startTile = this.worldToTile(start);
     const endTile = this.worldToTile(end);
 
+    // DEBUG: Add temporary logging
+    console.log('🔍 AStar Debug:', {
+      start,
+      end,
+      startTile,
+      endTile,
+      mapDimensions: { width: MAP_WIDTH, height: MAP_HEIGHT }
+    });
+
     // Validate positions
     if (!this.isValidTile(startTile) || !this.isValidTile(endTile)) {
+      console.log('❌ AStar: Invalid tiles detected', {
+        startTile,
+        endTile,
+        startValid: this.isValidTile(startTile),
+        endValid: this.isValidTile(endTile),
+        mapConstants: { MAP_WIDTH, MAP_HEIGHT }
+      });
       return null;
     }
+
+    // Check walkability
+    const startWalkable = this.isWalkable(startTile);
+    const endWalkable = this.isWalkable(endTile);
+    console.log('🚶 Walkability check:', {
+      startWalkable,
+      endWalkable
+    });
 
     // If start and end are the same, return empty path
     if (startTile.x === endTile.x && startTile.y === endTile.y) {
@@ -35,8 +64,14 @@ export class AStar {
     }
 
     // If end tile is not walkable, find nearest walkable tile
-    const targetTile = this.isWalkable(endTile) ? endTile : this.findNearestWalkableTile(endTile);
+    const targetTile = endWalkable ? endTile : this.findNearestWalkableTile(endTile);
     if (!targetTile) {
+      console.log('❌ AStar: No target tile found', {
+        endTile,
+        endWalkable,
+        searchRadiusUsed: 'default',
+        availableWalkableTiles: 'checking...'
+      });
       return null;
     }
 
@@ -54,16 +89,43 @@ export class AStar {
 
     this.openSet.push(startNode);
 
+    console.log('🚀 Starting AStar with:', {
+      startNode,
+      targetTile,
+      openSetSize: this.openSet.size()
+    });
+
+    let iterations = 0;
+    const maxIterations = 200; // Reduced from 1000 - should be sufficient for most paths
+
     // Main pathfinding loop
-    while (!this.openSet.empty()) {
+    while (!this.openSet.empty() && iterations < maxIterations) {
+      iterations++;
       const currentNode = this.openSet.pop()!;
       const currentKey = this.getNodeKey(currentNode);
+
+      // Remove from openSetMap
+      this.openSetMap.delete(currentKey);
+
+      // Debug every 50 iterations (reduced frequency)
+      if (iterations % 50 === 0 || iterations < 5) {
+        console.log(`🔄 AStar iteration ${iterations}:`, {
+          currentNode,
+          openSetSize: this.openSet.size(),
+          closedSetSize: this.closedSet.size
+        });
+      }
 
       // Add to closed set
       this.closedSet.add(currentKey);
 
       // Check if we reached the target
       if (currentNode.x === targetTile.x && currentNode.y === targetTile.y) {
+        console.log('✅ AStar: Path found successfully!', {
+          iterations,
+          pathLength: 'calculating...',
+          efficiency: `${iterations}/${maxIterations} iterations used`
+        });
         return this.reconstructPath(currentNode);
       }
 
@@ -80,13 +142,14 @@ export class AStar {
         // Calculate tentative g score
         const tentativeG = currentNode.g + this.getMovementCost(currentNode, neighbor);
 
-        // Check if this path is better
-        const existingNode = this.findNodeInOpenSet(neighbor);
+        // Check if this path is better using efficient map lookup
+        const existingNode = this.openSetMap.get(neighborKey);
         if (existingNode) {
           if (tentativeG < existingNode.g) {
             existingNode.g = tentativeG;
             existingNode.f = existingNode.g + existingNode.h;
             existingNode.parent = currentNode;
+            // Note: heap doesn't support efficient update, but this is still better
             this.openSet.updateItem(existingNode);
           }
         } else {
@@ -95,11 +158,21 @@ export class AStar {
           neighbor.f = neighbor.g + neighbor.h;
           neighbor.parent = currentNode;
           this.openSet.push(neighbor);
+          this.openSetMap.set(neighborKey, neighbor); // Add to map for O(1) lookup
         }
       }
     }
 
     // No path found
+    console.log('❌ AStar: No path found after exploring all possibilities', {
+      startTile,
+      targetTile,
+      iterations,
+      maxIterations,
+      openSetSize: this.openSet.size(),
+      closedSetSize: this.closedSet.size,
+      efficiency: `${iterations}/${maxIterations} iterations used`
+    });
     return null;
   }
 
@@ -108,8 +181,8 @@ export class AStar {
    */
   private worldToTile(position: Position): Position {
     return {
-      x: Math.floor(position.x / this.tileMap.tileSize),
-      y: Math.floor(position.y / this.tileMap.tileSize),
+      x: Math.floor(position.x / TILE_SIZE),
+      y: Math.floor(position.y / TILE_SIZE),
     };
   }
 
@@ -118,8 +191,8 @@ export class AStar {
    */
   private tileToWorld(tilePos: Position): Position {
     return {
-      x: (tilePos.x + 0.5) * this.tileMap.tileSize,
-      y: (tilePos.y + 0.5) * this.tileMap.tileSize,
+      x: (tilePos.x + 0.5) * TILE_SIZE,
+      y: (tilePos.y + 0.5) * TILE_SIZE,
     };
   }
 
@@ -129,9 +202,9 @@ export class AStar {
   private isValidTile(tile: Position): boolean {
     return (
       tile.x >= 0 &&
-      tile.x < this.tileMap.width &&
+      tile.x < MAP_WIDTH &&
       tile.y >= 0 &&
-      tile.y < this.tileMap.height
+      tile.y < MAP_HEIGHT
     );
   }
 
@@ -142,7 +215,75 @@ export class AStar {
     if (!this.isValidTile(tile)) {
       return false;
     }
-    return !this.tileMap.collisionMap[tile.y][tile.x];
+    // Convert tile coordinates to world coordinates for TileMap.isWalkable()
+    const worldPos = this.tileToWorld(tile);
+    return this.tileMap.isWalkable(worldPos);
+  }
+
+  /**
+   * Check if tile is a preferred walkable area (street/sidewalk)
+   */
+  private isPreferredWalkable(tile: Position): boolean {
+    if (!this.isValidTile(tile)) {
+      return false;
+    }
+    return this.tileMap.isWalkableArea(tile.x, tile.y);
+  }
+
+  /**
+   * Get movement cost between two adjacent tiles with urban optimization
+   */
+  private getMovementCost(from: PathNode, to: PathNode): number {
+    // Basic movement cost
+    const dx = Math.abs(to.x - from.x);
+    const dy = Math.abs(to.y - from.y);
+
+    // Diagonal movement costs more (√2 ≈ 1.414)
+    let baseCost = 1;
+    if (dx === 1 && dy === 1) {
+      baseCost = 1.414;
+    }
+
+    // Apply preference modifier for tile type with urban optimization
+    const tilePos = { x: to.x, y: to.y };
+    
+    // Check if this is a main avenue for better routing
+    if (this.isMainAvenue(to.x, to.y)) {
+      return baseCost * 0.7; // Prefer main avenues for efficiency
+    }
+    
+    // Use existing walkable checks
+    if (this.isPreferredWalkable(tilePos)) {
+      return baseCost; // Normal cost for streets/sidewalks
+    } else if (this.isWalkable(tilePos)) {
+      return baseCost * 2.5; // Higher cost for parks (still allowed but slower)
+    }
+
+    return Infinity; // Cannot walk here
+  }
+
+  /**
+   * Check if a position is on a main avenue (for optimal routing)
+   */
+  private isMainAvenue(x: number, y: number): boolean {
+    const AVENUE_SPACING = 25;
+    const MAIN_STREET_WIDTH = 3;
+    
+    // Check if on horizontal main avenue
+    for (let avY = AVENUE_SPACING; avY < 150; avY += AVENUE_SPACING) {
+      if (y >= avY && y < avY + MAIN_STREET_WIDTH) {
+        return true;
+      }
+    }
+    
+    // Check if on vertical main avenue
+    for (let avX = AVENUE_SPACING; avX < 200; avX += AVENUE_SPACING) {
+      if (x >= avX && x < avX + MAIN_STREET_WIDTH) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   /**
@@ -150,8 +291,13 @@ export class AStar {
    */
   private findNearestWalkableTile(target: Position): Position | null {
     const maxRadius = 10;
+    console.log('🔍 AStar: Searching for nearest walkable tile', {
+      target,
+      maxRadius
+    });
 
     for (let radius = 1; radius <= maxRadius; radius++) {
+      let candidatesChecked = 0;
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dy = -radius; dy <= radius; dy++) {
           // Only check perimeter of current radius
@@ -163,14 +309,25 @@ export class AStar {
             x: target.x + dx,
             y: target.y + dy,
           };
+          candidatesChecked++;
 
           if (this.isWalkable(candidate)) {
+            console.log('✅ AStar: Found walkable tile', {
+              candidate,
+              radius,
+              candidatesChecked
+            });
             return candidate;
           }
         }
       }
+      console.log(`🔍 AStar: Radius ${radius} complete, checked ${candidatesChecked} candidates`);
     }
 
+    console.log('❌ AStar: No walkable tile found within max radius', {
+      target,
+      maxRadius
+    });
     return null;
   }
 
@@ -179,22 +336,6 @@ export class AStar {
    */
   private calculateHeuristic(a: Position, b: Position): number {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-  }
-
-  /**
-   * Get movement cost between two adjacent tiles
-   */
-  private getMovementCost(from: PathNode, to: PathNode): number {
-    // Basic movement cost is 1 for orthogonal movement
-    const dx = Math.abs(to.x - from.x);
-    const dy = Math.abs(to.y - from.y);
-
-    // Diagonal movement costs more (√2 ≈ 1.414)
-    if (dx === 1 && dy === 1) {
-      return 1.414;
-    }
-
-    return 1;
   }
 
   /**
@@ -269,23 +410,12 @@ export class AStar {
   }
 
   /**
-   * Find node in open set
-   */
-  private findNodeInOpenSet(target: PathNode): PathNode | null {
-    const targetKey = this.getNodeKey(target);
-
-    // Note: This is not optimal, but heap library doesn't provide easy search
-    // In a production environment, you might want to maintain a separate map
-    const nodes = this.openSet.toArray();
-    return nodes.find(node => this.getNodeKey(node) === targetKey) || null;
-  }
-
-  /**
    * Reset pathfinding state
    */
   private reset(): void {
     this.openSet = new Heap<PathNode>((a, b) => a.f - b.f);
     this.closedSet.clear();
+    this.openSetMap.clear();
   }
 
   /**

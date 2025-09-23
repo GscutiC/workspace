@@ -114,21 +114,93 @@ export interface TileData {
 }
 
 export enum TileType {
+  // Áreas caminables
   FLOOR = 'floor',
+  STREET = 'street',
+  SIDEWALK = 'sidewalk',
+  PARK_PATH = 'park_path',
+  
+  // Obstáculos básicos
   WALL = 'wall',
   DESK = 'desk',
   CHAIR = 'chair',
+  
+  // Edificios y estructuras
+  BUILDING = 'building',
+  OFFICE_BUILDING = 'office_building',
+  RESIDENTIAL_BUILDING = 'residential_building',
+  COMMERCIAL_BUILDING = 'commercial_building',
+  
+  // Naturaleza y parques
   PLANT = 'plant',
+  TREE = 'tree',
+  PARK_GRASS = 'park_grass',
+  PARK_BENCH = 'park_bench',
+  FOUNTAIN = 'fountain',
+  WATER = 'water',
+  
+  // Elementos urbanos
   DOOR = 'door',
   WINDOW = 'window',
+  STREET_LIGHT = 'street_light',
+  TRAFFIC_LIGHT = 'traffic_light',
+  ROAD_SIGN = 'road_sign',
+}
+
+// Categorías de tiles para fácil clasificación
+export enum TileCategory {
+  WALKABLE = 'walkable',
+  BUILDING = 'building',
+  NATURE = 'nature',
+  URBAN_FURNITURE = 'urban_furniture',
+  OBSTACLE = 'obstacle'
+}
+
+// Propiedades extendidas de tiles
+export interface ExtendedTileData extends TileData {
+  category: TileCategory;
+  obstacleId?: string; // ID único para edificios/obstáculos específicos
+  metadata?: {
+    name?: string;
+    description?: string;
+    canEnter?: boolean;
+    isOffice?: boolean;
+    isPark?: boolean;
+    capacity?: number;
+  };
+}
+
+// Registro de obstáculos/edificios
+export interface ObstacleInfo {
+  id: string;
+  position: Position;
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  metadata: {
+    name?: string;
+    type: string;
+    interactive: boolean;
+    description?: string;
+    canEnter: boolean;
+    isOffice: boolean;
+    isPark: boolean;
+    capacity?: number;
+    floors?: number;
+  };
 }
 
 export interface TileMap {
   width: number;
   height: number;
   tileSize: number;
-  tiles: TileData[][];
+  tiles: ExtendedTileData[][];
   collisionMap: boolean[][];
+  obstacles: Map<string, ObstacleInfo>; // Registro de obstáculos por ID
+  walkableAreas: boolean[][]; // Mapa específico de áreas caminables (calles)
 }
 
 // Chat Types

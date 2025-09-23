@@ -5,10 +5,16 @@ import { MovementEasing } from '../utils/MovementEasing';
 import { AStar } from '../pathfinding/AStar';
 import { TileMap } from '../TileMap';
 
+// Define the GameSystem interface locally to ensure implementation
+interface GameSystem {
+  update?(deltaTime: number, gameState: GameState): void;
+  destroy?(): void;
+}
+
 /**
  * MovementSystem handles avatar movement, pathfinding, and animation
  */
-export class MovementSystem {
+export class MovementSystem implements GameSystem {
   private gameState: GameState;
   private tileMap: TileMap;
   private pathfinder: AStar;
@@ -19,10 +25,18 @@ export class MovementSystem {
   constructor(gameState: GameState, tileMap: TileMap) {
     this.gameState = gameState;
     this.tileMap = tileMap;
-    this.pathfinder = new AStar(tileMap.getMapData());
+    this.pathfinder = new AStar(tileMap);
     this.movementEasing = new MovementEasing();
     this.movementTargets = new Map();
     this.lastKeyInputTime = new Map();
+  }
+
+  /**
+   * Update the pathfinder when the tilemap changes
+   */
+  public updatePathfinder(): void {
+    this.pathfinder = new AStar(this.tileMap);
+    console.log('🗺️ Pathfinder updated with new TileMap data');
   }
 
   /**
@@ -30,12 +44,6 @@ export class MovementSystem {
    */
   public update(deltaTime: number, gameState: GameState): void {
     this.gameState = gameState;
-
-    // Count moving avatars and only log when there's movement
-    const movingCount = Array.from(this.movementTargets.values()).filter(t => t.isMoving).length;
-    if (movingCount > 0) {
-      console.log('🔄 MovementSystem.update - Moving avatars:', movingCount);
-    }
 
     // Update all moving avatars
     this.gameState.avatars.forEach((avatar) => {
@@ -59,11 +67,26 @@ export class MovementSystem {
 
     // Check if target position is walkable
     const isWalkable = this.tileMap.isWalkable(targetPosition);
+    const isStreet = this.tileMap.isWalkableArea(
+      Math.floor(targetPosition.x / 32), 
+      Math.floor(targetPosition.y / 32)
+    );
+    
     console.log('🚶 Target position walkable:', isWalkable);
+    console.log('🛣️ Target position is street/sidewalk:', isStreet);
     
     if (!isWalkable) {
       console.warn('⚠️ Target position is not walkable:', targetPosition);
       return false;
+    }
+
+    // Log when moving to non-street areas (parks are allowed but noted)
+    if (!isStreet) {
+      const tileCategory = this.tileMap.getTileCategory(
+        Math.floor(targetPosition.x / 32), 
+        Math.floor(targetPosition.y / 32)
+      );
+      console.log('🌳 Moving to non-street area:', { targetPosition, category: tileCategory });
     }
 
     // Calculate path
@@ -241,7 +264,32 @@ export class MovementSystem {
 
     // Validate movement (pass avatar ID to exclude self-collision)
     if (this.isValidMove(avatar.position, newPosition, avatar.id)) {
+      // Log obstacle information when entering new tiles
+      const oldTileX = Math.floor(avatar.position.x / 32);
+      const oldTileY = Math.floor(avatar.position.y / 32);
+      const newTileX = Math.floor(newPosition.x / 32);
+      const newTileY = Math.floor(newPosition.y / 32);
+      
+      // Update position
       avatar.position = newPosition;
+      
+      // Only log when entering a new tile
+      if (newTileX !== oldTileX || newTileY !== oldTileY) {
+        const category = this.tileMap.getTileCategory(newTileX, newTileY);
+        const obstacles = this.tileMap.getObstaclesInArea({
+          x: newTileX - 1, y: newTileY - 1, width: 3, height: 3
+        });
+        
+        if (obstacles.length > 0) {
+          console.log('🏢 Nearby obstacles:', obstacles.map(o => ({
+            id: o.id,
+            type: o.metadata.type,
+            interactive: o.metadata.interactive
+          })));
+        }
+        
+        console.log('📍 Entered tile:', { x: newTileX, y: newTileY, category });
+      }
 
       // Determine direction for animation
       const direction = this.calculateDirection(normalizedX, normalizedY);

@@ -1,8 +1,9 @@
 import { Application, Container } from 'pixi.js';
-import type { GameState, Position, AvatarData } from '@/types/game';
+import type { GameState, Position, AvatarData, ObstacleInfo } from '@/types/game';
 import { LayerType, Direction, UserStatus } from '@/types/game';
-import { GAME_CONFIG, LAYER_CONFIG, TILE_SIZE } from '@/constants/game';
+import { GAME_CONFIG, LAYER_CONFIG, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '@/constants/game';
 import { TileMap } from './TileMap';
+import { MapFactory } from './MapFactory';
 import { Viewport } from './Viewport';
 import { MovementSystem } from './systems/MovementSystem';
 import { RenderSystem } from './systems/RenderSystem';
@@ -33,6 +34,7 @@ export class GameEngine {
   private movementController: MovementController | null = null;
   private isRunning: boolean = false;
   private lastFrameTime: number = 0;
+  private cullingEnabled: boolean = true;
 
   constructor() {
     // Initialize Pixi.js application
@@ -58,8 +60,8 @@ export class GameEngine {
     // Setup layers after Pixi.js is ready
     this.setupLayers();
 
-    // Initialize systems after canvas is available
-    this.initializeSystems();
+    // Initialize systems after canvas is available (now with real parcels)
+    await this.initializeSystems();
   }
 
   /**
@@ -127,11 +129,26 @@ export class GameEngine {
   }
 
   /**
-   * Initialize game systems
+   * Initialize game systems with real parcels from API
    */
-  private initializeSystems(): void {
-    // Create tile map
-    this.tileMap = new TileMap();
+  private async initializeSystems(): Promise<void> {
+    // Generate map data using MapFactory with real parcels
+    console.log('🏗️ Loading real parcels from API for map generation...');
+    const { tiles, obstacles, parcels } = await MapFactory.generateMapWithRealParcels('default');
+    
+    // Create tile map with real parcel data
+    this.tileMap = new TileMap(
+      {
+        width: MAP_WIDTH,
+        height: MAP_HEIGHT,
+        tileSize: TILE_SIZE,
+        tiles: tiles,
+        obstacles: obstacles,
+        collisionMap: [],
+        walkableAreas: []
+      },
+      parcels
+    );
     const worldBounds = this.tileMap.getWorldBounds();
 
     // Create a main world container that will hold all layers
@@ -164,7 +181,7 @@ export class GameEngine {
     // Initialize game systems
     this.systems.set('input', new InputSystem(this.app.canvas, this.gameState));
     this.systems.set('movement', new MovementSystem(this.gameState, this.tileMap));
-    this.systems.set('render', new RenderSystem(this.layers, this.objectPool));
+    this.systems.set('render', new RenderSystem(this.layers, this.objectPool, this.viewport));
 
     // Initialize minimap system
     this.minimapSystem = new MinimapSystem(this.tileMap, this.gameState);
@@ -183,6 +200,10 @@ export class GameEngine {
 
     // Connect input events
     this.setupInputHandlers();
+
+    // Show parcel numbers by default to help with identification
+    console.log('🏗️ Enabling parcel numbers by default for better navigation');
+    this.tileMap.toggleParcels();
   }
 
   /**
@@ -253,9 +274,9 @@ export class GameEngine {
       this.viewport.stopDrag();
     };
 
-    // Mouse click for movement
-    inputSystem.onMouseClick = (position: Position) => {
-      console.log('🖱️ GameEngine received mouse click at:', position);
+    // Mouse click for movement (left click only)
+    inputSystem.onLeftClick = (position: Position) => {
+      console.log('� GameEngine received LEFT click at:', position);
       
       if (!this.gameState.currentUser) {
         console.error('❌ No current user set!');
@@ -267,13 +288,30 @@ export class GameEngine {
         return;
       }
       
-      console.log('👤 Current user:', this.gameState.currentUser.id);
+      console.log('👤 Moving avatar for user:', this.gameState.currentUser.id);
 
       const worldPos = this.viewport.screenToWorld(position);
-      console.log('🌍 Converted to world position:', worldPos);
+      console.log('🌍 Avatar moving to world position:', worldPos);
       
-      // Use MovementController for mouse movement
+      // Use MovementController for avatar movement
       this.movementController.handleMouseMovement(worldPos, this.gameState.currentUser.id);
+    };
+
+    // Right click for camera movement
+    inputSystem.onRightClick = (position: Position) => {
+      console.log('👆 GameEngine received RIGHT click at:', position);
+      
+      const worldPos = this.viewport.screenToWorld(position);
+      console.log('🎥 Moving camera to world position:', worldPos);
+      
+      // Move camera to clicked position
+      this.viewport.moveTo(worldPos, true);
+    };
+
+    // Keep general click handler for backward compatibility
+    inputSystem.onMouseClick = (position: Position) => {
+      console.log('🖱️ GameEngine received general mouse click at:', position);
+      // General click handling can be added here if needed
     };
 
     // Mouse wheel for zoom
@@ -336,7 +374,7 @@ export class GameEngine {
     this.viewport.update(this.gameState.deltaTime);
 
     // Update all systems
-    this.systems.forEach((system) => {
+    this.systems.forEach((system, name) => {
       if (system.update) {
         system.update(this.gameState.deltaTime, this.gameState);
       }
@@ -490,30 +528,37 @@ export class GameEngine {
    */
   private findSpawnPosition(): Position {
     const worldBounds = this.tileMap.getWorldBounds();
-    const maxAttempts = 50;
-
-    // Add safety margin from walls (2 tiles = 64 pixels)
-    const safetyMargin = TILE_SIZE * 2; // 64 pixels
-
-    for (let i = 0; i < maxAttempts; i++) {
-      const position: Position = {
-        x: Math.random() * (worldBounds.width - safetyMargin * 2) + safetyMargin,
-        y: Math.random() * (worldBounds.height - safetyMargin * 2) + safetyMargin,
-      };
-
-      if (this.tileMap.isWalkable(position)) {
-        console.log('🏠 Spawn position found:', position, 'world bounds:', worldBounds);
-        return position;
-      }
-    }
-
-    // Fallback to center if no position found
+    
+    // For debugging, let's spawn closer to the center initially
     const centerPosition = {
       x: worldBounds.width / 2,
       y: worldBounds.height / 2,
     };
     
-    console.log('🏠 Using fallback center position:', centerPosition);
+    console.log('🏠 Using center spawn position:', centerPosition, 'world bounds:', worldBounds);
+    
+    // Simple validation - if center is walkable, use it
+    if (this.tileMap.isWalkable(centerPosition)) {
+      return centerPosition;
+    }
+    
+    // Try positions near center if center is not walkable
+    const maxAttempts = 20;
+    const searchRadius = 100; // Search within 100 pixels of center
+    
+    for (let i = 0; i < maxAttempts; i++) {
+      const position: Position = {
+        x: centerPosition.x + (Math.random() - 0.5) * searchRadius,
+        y: centerPosition.y + (Math.random() - 0.5) * searchRadius,
+      };
+
+      if (this.tileMap.isWalkable(position)) {
+        console.log('🏠 Spawn position found near center:', position);
+        return position;
+      }
+    }
+    
+    console.log('🏠 Using fallback center position (may not be walkable):', centerPosition);
     return centerPosition;
   }
 
@@ -523,13 +568,16 @@ export class GameEngine {
   public resize(width: number, height: number): void {
     this.app.renderer.resize(width, height);
 
-    // Update viewport configuration
-    this.viewport.setConfig({
-      worldWidth: width,
-      worldHeight: height,
-    });
+    // Only resize viewport if it's initialized
+    if (this.viewport) {
+      // Update viewport configuration
+      this.viewport.setConfig({
+        worldWidth: width,
+        worldHeight: height,
+      });
+    }
 
-    // Reposition minimap
+    // Reposition minimap if it exists
     if (this.minimapSystem) {
       const padding = 20;
       const connectedUsersPanelHeight = 140; // Approximate height of Connected Users panel
@@ -545,6 +593,13 @@ export class GameEngine {
    */
   public toggleDebugMode(): void {
     this.tileMap.toggleDebug();
+  }
+
+  /**
+   * Toggle parcel numbering overlay
+   */
+  public toggleParcels(): void {
+    this.tileMap.toggleParcels();
   }
 
   /**
@@ -746,6 +801,210 @@ export class GameEngine {
    */
   public getLayer(layerType: LayerType): Container | undefined {
     return this.layers.get(layerType);
+  }
+
+  /**
+   * Debug methods for troubleshooting map and avatar issues
+   */
+  public enableDebugMode(enabled: boolean = true): void {
+    const renderSystem = this.systems.get('render') as RenderSystem;
+    if (renderSystem) {
+      renderSystem.setDebugMode(enabled);
+    }
+    console.log(`🐛 GameEngine debug mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  public toggleCulling(enabled?: boolean): void {
+    const renderSystem = this.systems.get('render') as RenderSystem;
+    if (renderSystem) {
+      const newState = enabled !== undefined ? enabled : !this.cullingEnabled;
+      renderSystem.setCullingEnabled(newState);
+      this.cullingEnabled = newState;
+    }
+  }
+
+  public setCullingMargin(margin: number): void {
+    const renderSystem = this.systems.get('render') as RenderSystem;
+    if (renderSystem) {
+      renderSystem.setCullingMargin(margin);
+    }
+  }
+
+  public getRenderStats(): {
+    culling: { total: number; visible: number; hidden: number };
+    viewport: { x: number; y: number; width: number; height: number };
+    avatars: Array<{ id: string; name: string; position: { x: number; y: number } }>;
+  } | null {
+    const renderSystem = this.systems.get('render') as RenderSystem;
+    if (renderSystem) {
+      return {
+        culling: renderSystem.getCullingStats(),
+        viewport: this.viewport.getVisibleBounds(),
+        avatars: Array.from(this.gameState.avatars.values()).map(a => ({
+          id: a.id,
+          name: a.name,
+          position: a.position
+        }))
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Debug method to list all visible elements and their properties
+   */
+  public debugVisibleElements(): void {
+    console.log('🔍 Debugging visible elements...');
+    
+    // Check all layers
+    this.layers.forEach((layer, layerType) => {
+      console.log(`📚 Layer ${LayerType[layerType]}:`, {
+        children: layer.children.length,
+        visible: layer.visible,
+        alpha: layer.alpha
+      });
+      
+      // Recursively check children
+      this.debugContainerChildren(layer, `  ${LayerType[layerType]}`);
+    });
+
+    // Check minimap
+    if (this.minimapSystem) {
+      console.log('🗺️ Minimap elements:');
+      const minimapContainer = this.minimapSystem.getContainer();
+      this.debugContainerChildren(minimapContainer, '  Minimap');
+    }
+  }
+
+  /**
+   * Helper to debug container children recursively
+   */
+  private debugContainerChildren(container: Container, prefix: string): void {
+    container.children?.forEach((child: Container, index: number) => {
+      const info = {
+        type: child.constructor.name,
+        visible: child.visible,
+        alpha: child.alpha,
+        position: { x: child.x, y: child.y },
+        tint: child.tint,
+        name: child.name
+      };
+      
+      // Check for pink/magenta colors (common hex values)
+      const isPink = child.tint === 0xFF00FF || child.tint === 0xFF69B4 || 
+                    child.tint === 0xFFC0CB || child.tint === 0xFF1493;
+      
+      if (isPink || child.name?.includes('pink') || child.name?.includes('marker')) {
+        console.log(`🎯 POTENTIAL PINK ELEMENT: ${prefix}[${index}]`, info);
+      } else if (child.visible && child.alpha > 0) {
+        console.log(`${prefix}[${index}]`, info);
+      }
+      
+      // Recursively check children
+      if (child.children?.length > 0) {
+        this.debugContainerChildren(child, `${prefix}  `);
+      }
+    });
+  }
+
+  /**
+   * Hide elements by name pattern or type
+   */
+  public hideElementsByPattern(pattern: string): number {
+    let hiddenCount = 0;
+    
+    this.layers.forEach((layer, layerType) => {
+      hiddenCount += this.hideElementsInContainer(layer, pattern);
+    });
+
+    // Also check minimap
+    if (this.minimapSystem) {
+      const minimapContainer = this.minimapSystem.getContainer();
+      hiddenCount += this.hideElementsInContainer(minimapContainer, pattern);
+    }
+
+    console.log(`🙈 Hidden ${hiddenCount} elements matching pattern: "${pattern}"`);
+    return hiddenCount;
+  }
+
+  /**
+   * Helper to hide elements in a container
+   */
+  private hideElementsInContainer(container: Container, pattern: string): number {
+    let hiddenCount = 0;
+    
+    container.children?.forEach((child: Container) => {
+      const name = child.name || '';
+      const type = child.constructor.name || '';
+      
+      if (name.toLowerCase().includes(pattern.toLowerCase()) || 
+          type.toLowerCase().includes(pattern.toLowerCase())) {
+        console.log(`🙈 Hiding element: ${name} (${type})`);
+        child.visible = false;
+        hiddenCount++;
+      }
+      
+      // Recursively check children
+      if (child.children?.length > 0) {
+        hiddenCount += this.hideElementsInContainer(child, pattern);
+      }
+    });
+    
+    return hiddenCount;
+  }
+
+  /**
+   * Toggle area visualization (color-coded by category)
+   */
+  public toggleAreaVisualization(show: boolean = true): void {
+    this.tileMap.toggleAreaVisualization(show);
+    console.log(`🎨 Area visualization ${show ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Toggle obstacle visualization with markers
+   */
+  public toggleObstacleVisualization(show: boolean = true): void {
+    this.tileMap.visualizeObstacles(show);
+    console.log(`🏢 Obstacle visualization ${show ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get obstacle information at position
+   */
+  public getObstacleAt(worldX: number, worldY: number): ObstacleInfo | null {
+    const tileX = Math.floor(worldX / 32);
+    const tileY = Math.floor(worldY / 32);
+    
+    const obstacles = this.tileMap.getObstaclesInArea({
+      x: tileX, y: tileY, width: 1, height: 1
+    });
+    
+    return obstacles.length > 0 ? obstacles[0] : null;
+  }
+
+  /**
+   * Get area information at position
+   */
+  public getAreaInfo(worldX: number, worldY: number): {
+    position: { x: number; y: number };
+    category: string | null;
+    isWalkable: boolean;
+    isStreet: boolean;
+    obstacles: ObstacleInfo[];
+  } {
+    const tileX = Math.floor(worldX / 32);
+    const tileY = Math.floor(worldY / 32);
+    
+    return {
+      position: { x: tileX, y: tileY },
+      category: this.tileMap.getTileCategory(tileX, tileY),
+      isWalkable: this.tileMap.isWalkable({ x: worldX, y: worldY }),
+      isStreet: this.tileMap.isWalkableArea(tileX, tileY),
+      obstacles: this.tileMap.getObstaclesInArea({
+        x: tileX - 1, y: tileY - 1, width: 3, height: 3
+      })
+    };
   }
 
   /**

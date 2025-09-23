@@ -13,18 +13,18 @@ export const GAME_CONFIG: GameConfig = {
 
 // Viewport Configuration
 export const VIEWPORT_CONFIG: ViewportConfig = {
-  worldWidth: 2400,
-  worldHeight: 1600,
-  minZoom: 0.5,
-  maxZoom: 2.0,
-  zoom: 1.0,
-  center: { x: 1200, y: 800 },
+  worldWidth: 6400, // 200 * 32
+  worldHeight: 4800, // 150 * 32
+  minZoom: 0.3,
+  maxZoom: 2.5,
+  zoom: 0.8,
+  center: { x: 3200, y: 2400 },
 };
 
 // Tile Configuration
 export const TILE_SIZE = 32;
-export const MAP_WIDTH = 75; // tiles
-export const MAP_HEIGHT = 50; // tiles
+export const MAP_WIDTH = 200; // tiles - Increased for city design
+export const MAP_HEIGHT = 150; // tiles - Increased for city design
 
 // Avatar Configuration
 export const AVATAR_CONFIG = {
@@ -137,6 +137,85 @@ export const STATUS_COLORS = {
 
 // Tile Type Properties
 export const TILE_PROPERTIES = {
+  // Áreas caminables - COLORES MÁS BRILLANTES PARA DEBUG
+  [TileType.STREET]: {
+    walkable: true,
+    color: 0x808080, // Gris más claro
+    zIndex: LayerType.FLOOR,
+  },
+  [TileType.SIDEWALK]: {
+    walkable: true,
+    color: 0xC0C0C0, // Gris plateado
+    zIndex: LayerType.FLOOR,
+  },
+  [TileType.PARK_PATH]: {
+    walkable: true,
+    color: 0xD2B48C, // Tan claro
+    zIndex: LayerType.FLOOR,
+  },
+  
+  // Edificios
+  [TileType.BUILDING]: {
+    walkable: false,
+    color: 0x696969, // Gris oscuro - edificio genérico
+    zIndex: LayerType.OBJECTS,
+  },
+  [TileType.OFFICE_BUILDING]: {
+    walkable: false,
+    color: 0x4169E1, // Azul real
+    zIndex: LayerType.OBJECTS,
+  },
+  [TileType.RESIDENTIAL_BUILDING]: {
+    walkable: false,
+    color: 0xB22222, // Rojo ladrillo
+    zIndex: LayerType.OBJECTS,
+  },
+  [TileType.COMMERCIAL_BUILDING]: {
+    walkable: false,
+    color: 0x32CD32, // Verde lima
+    zIndex: LayerType.OBJECTS,
+  },
+  
+  // Naturaleza/Parques
+  [TileType.TREE]: {
+    walkable: false,
+    color: 0x006400, // Verde oscuro
+    zIndex: LayerType.OBJECTS,
+  },
+  [TileType.PARK_GRASS]: {
+    walkable: true,
+    color: 0x90EE90, // Verde claro
+    zIndex: LayerType.FLOOR,
+  },
+  [TileType.FOUNTAIN]: {
+    walkable: false,
+    color: 0x00CED1, // Turquesa oscuro
+    zIndex: LayerType.OBJECTS,
+  },
+  [TileType.WATER]: {
+    walkable: false,
+    color: 0x1E90FF, // Azul profundo para agua
+    zIndex: LayerType.FLOOR,
+  },
+  
+  // Mobiliario urbano
+  [TileType.STREET_LIGHT]: {
+    walkable: false,
+    color: 0xFFD700, // Dorado
+    zIndex: LayerType.OBJECTS,
+  },
+  [TileType.TRAFFIC_LIGHT]: {
+    walkable: false,
+    color: 0xFF4500, // Rojo naranja
+    zIndex: LayerType.OBJECTS,
+  },
+  [TileType.ROAD_SIGN]: {
+    walkable: false,
+    color: 0x0000FF, // Azul para señales viales
+    zIndex: LayerType.OBJECTS,
+  },
+  
+  // Tipos de oficina legacy (para compatibilidad)
   [TileType.FLOOR]: {
     walkable: true,
     color: 0xF5F5DC, // Beige
@@ -144,32 +223,32 @@ export const TILE_PROPERTIES = {
   },
   [TileType.WALL]: {
     walkable: false,
-    color: 0x8B4513, // Brown
+    color: 0x8B4513, // Marrón
     zIndex: LayerType.OBJECTS,
   },
   [TileType.DESK]: {
     walkable: false,
-    color: 0x654321, // Dark brown
+    color: 0x654321, // Marrón oscuro
     zIndex: LayerType.OBJECTS,
   },
   [TileType.CHAIR]: {
     walkable: false,
-    color: 0x2F4F4F, // Dark slate gray
+    color: 0x2F4F4F, // Gris pizarra oscuro
     zIndex: LayerType.OBJECTS,
   },
   [TileType.PLANT]: {
     walkable: false,
-    color: 0x228B22, // Forest green
+    color: 0x228B22, // Verde bosque
     zIndex: LayerType.OBJECTS,
   },
   [TileType.DOOR]: {
     walkable: true,
-    color: 0x8B4513, // Brown
+    color: 0x8B4513, // Marrón
     zIndex: LayerType.OBJECTS,
   },
   [TileType.WINDOW]: {
     walkable: false,
-    color: 0x87CEEB, // Sky blue
+    color: 0x87CEEB, // Azul cielo
     zIndex: LayerType.OBJECTS,
   },
 };

@@ -4,6 +4,7 @@ import { Direction, UserStatus, LayerType } from '@/types/game';
 import { AVATAR_CONFIG } from '@/constants/game';
 import { ObjectPool } from './ObjectPool';
 import { AvatarAnimationSystem } from './AvatarAnimationSystem';
+import { Viewport } from '../Viewport';
 
 /**
  * RenderSystem handles all visual rendering of avatars, effects, and UI elements
@@ -17,10 +18,15 @@ export class RenderSystem {
   private objectPool: ObjectPool;
   private animationSystem: AvatarAnimationSystem;
   private lastRenderTime: number = 0;
+  private viewport: Viewport;
+  private cullingEnabled: boolean = true;
+  private cullingMargin: number = 150;
+  private debugMode: boolean = false;
 
-  constructor(layers: Map<LayerType, Container>, objectPool: ObjectPool) {
+  constructor(layers: Map<LayerType, Container>, objectPool: ObjectPool, viewport: Viewport) {
     this.layers = layers;
     this.objectPool = objectPool;
+    this.viewport = viewport;
     this.avatarSprites = new Map();
     this.chatBubbles = new Map();
     this.statusIndicators = new Map();
@@ -97,6 +103,22 @@ export class RenderSystem {
     if (characterLayer) {
       characterLayer.addChild(avatarContainer);
       console.log(`✅ Avatar ${avatar.name} added to scene at (${avatar.position.x}, ${avatar.position.y})`);
+      
+      // Debug information
+      console.log(`🔍 Avatar container debug:`, {
+        visible: avatarContainer.visible,
+        alpha: avatarContainer.alpha,
+        scale: avatarContainer.scale,
+        zIndex: avatarContainer.zIndex,
+        children: avatarContainer.children.length
+      });
+      
+      console.log(`🔍 Character layer debug:`, {
+        visible: characterLayer.visible,
+        alpha: characterLayer.alpha,
+        zIndex: characterLayer.zIndex,
+        children: characterLayer.children.length
+      });
     } else {
       console.error('❌ CHARACTERS layer not found!');
     }
@@ -423,24 +445,91 @@ export class RenderSystem {
    * Perform frustum culling for performance
    */
   private performFrustumCulling(gameState: GameState): void {
-    const viewport = gameState.viewport;
-    if (!viewport) return;
+    if (!this.viewport || !this.cullingEnabled) {
+      // If culling is disabled, ensure all avatars are visible
+      if (!this.cullingEnabled) {
+        for (const [userId, avatarContainer] of this.avatarSprites) {
+          avatarContainer.visible = true;
+        }
+      }
+      return;
+    }
 
+    // Use proper viewport bounds instead of hardcoded values
+    const viewportBounds = this.viewport.getVisibleBounds();
+    
     const visibleBounds = {
-      x: viewport.x - 100, // Add margin
-      y: viewport.y - 100,
-      width: 800 / viewport.zoom + 200, // Use default screen dimensions
-      height: 600 / viewport.zoom + 200,
+      x: viewportBounds.x - this.cullingMargin,
+      y: viewportBounds.y - this.cullingMargin,
+      width: viewportBounds.width + (this.cullingMargin * 2),
+      height: viewportBounds.height + (this.cullingMargin * 2),
     };
 
-    // Hide/show avatars based on visibility
+    if (this.debugMode) {
+      console.log(`🔍 Culling bounds:`, visibleBounds);
+      console.log(`📐 Viewport bounds:`, viewportBounds);
+    }
+
+    // Hide/show avatars based on visibility with improved logging
     for (const [userId, avatarContainer] of this.avatarSprites) {
       const avatar = gameState.avatars.get(userId);
       if (!avatar) continue;
       
+      const wasVisible = avatarContainer.visible;
       const isVisible = this.isPositionInBounds(avatar.position, visibleBounds);
+      
+      if (wasVisible !== isVisible || this.debugMode) {
+        console.log(`👁️ Avatar ${avatar.name} visibility: ${wasVisible} -> ${isVisible} at (${avatar.position.x}, ${avatar.position.y})`);
+        if (this.debugMode) {
+          console.log(`� Position in bounds: x(${avatar.position.x} in ${visibleBounds.x}-${visibleBounds.x + visibleBounds.width}) y(${avatar.position.y} in ${visibleBounds.y}-${visibleBounds.y + visibleBounds.height})`);
+        }
+      }
+      
       avatarContainer.visible = isVisible;
     }
+  }
+
+  /**
+   * Enable or disable frustum culling
+   */
+  public setCullingEnabled(enabled: boolean): void {
+    console.log(`🎛️ Frustum culling ${enabled ? 'enabled' : 'disabled'}`);
+    this.cullingEnabled = enabled;
+  }
+
+  /**
+   * Set culling margin for fine-tuning
+   */
+  public setCullingMargin(margin: number): void {
+    console.log(`📏 Culling margin set to: ${margin}px`);
+    this.cullingMargin = margin;
+  }
+
+  /**
+   * Enable or disable debug mode
+   */
+  public setDebugMode(enabled: boolean): void {
+    console.log(`🐛 Debug mode ${enabled ? 'enabled' : 'disabled'}`);
+    this.debugMode = enabled;
+  }
+
+  /**
+   * Get current culling stats
+   */
+  public getCullingStats(): { total: number; visible: number; hidden: number } {
+    const total = this.avatarSprites.size;
+    let visible = 0;
+    let hidden = 0;
+
+    for (const [, avatarContainer] of this.avatarSprites) {
+      if (avatarContainer.visible) {
+        visible++;
+      } else {
+        hidden++;
+      }
+    }
+
+    return { total, visible, hidden };
   }  /**
    * Check if position is within bounds
    */

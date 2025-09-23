@@ -11,10 +11,12 @@ export class InputSystem {
   private isListening: boolean = false;
 
   // Event callbacks
-  public onMouseDown?: (position: Position) => void;
+  public onMouseDown?: (position: Position, button: number) => void;
   public onMouseMove?: (position: Position) => void;
-  public onMouseUp?: (position: Position) => void;
+  public onMouseUp?: (position: Position, button: number) => void;
   public onMouseClick?: (position: Position) => void;
+  public onLeftClick?: (position: Position) => void;
+  public onRightClick?: (position: Position) => void;
   public onMouseWheel?: (delta: number, position: Position) => void;
   public onKeyPress?: (key: string) => void;
   public onKeyRelease?: (key: string) => void;
@@ -169,7 +171,7 @@ export class InputSystem {
     // Focus canvas for keyboard input
     this.canvas.focus();
 
-    this.onMouseDown?.(position);
+    this.onMouseDown?.(position, event.button);
   }
 
   /**
@@ -205,7 +207,7 @@ export class InputSystem {
 
     // Check for click (not drag)
     if (!this.isDragging && this.dragStartPosition) {
-      this.handleClick(position);
+      this.handleClick(position, event.button);
     }
 
     // Reset drag state
@@ -213,13 +215,13 @@ export class InputSystem {
     this.dragStartPosition = undefined;
     this.gameState.viewport.isDragging = false;
 
-    this.onMouseUp?.(position);
+    this.onMouseUp?.(position, event.button);
   }
 
   /**
    * Handle click events
    */
-  private handleClick(position: Position): void {
+  private handleClick(position: Position, button: number): void {
     const now = Date.now();
     const timeSinceLastClick = now - this.lastClickTime;
 
@@ -228,9 +230,20 @@ export class InputSystem {
       return;
     }
 
-    console.log('🖱️ Mouse click detected at position:', position);
+    console.log('🖱️ Mouse click detected at position:', position, 'button:', button);
     this.lastClickTime = now;
+    
+    // Call general click handler
     this.onMouseClick?.(position);
+    
+    // Call specific button handlers
+    if (button === 0) { // Left click
+      console.log('👆 Left click detected');
+      this.onLeftClick?.(position);
+    } else if (button === 2) { // Right click
+      console.log('👆 Right click detected');
+      this.onRightClick?.(position);
+    }
   }
 
   /**
@@ -350,7 +363,7 @@ export class InputSystem {
       const touch = event.changedTouches[0];
       if (touch) {
         const position = this.getTouchPosition(touch);
-        this.handleClick(position);
+        this.handleClick(position, 0); // Touch is treated as left click
       }
     }
 
