@@ -12,7 +12,6 @@ import { CurrentParcelInfo } from '@/components/CurrentParcelInfo';
 import { ParcelAdminPanel } from '@/components/ParcelAdminPanel';
 import { DistrictNavigator } from '@/components/DistrictNavigator';
 import { DistrictStatusIndicator } from '@/components/DistrictStatusIndicator';
-import { useDistrictSystem } from '@/hooks/useDistrictSystem';
 import { useDistricts } from '@/hooks/useDistricts';
 import { ParcelInfo } from '@/lib/game/generators/CityGenerator';
 import { logInfo, logDebug, LogCategory } from '@/lib/utils/logger';
@@ -51,6 +50,17 @@ export function VirtualOffice() {
   // Get avatar configuration with real-time updates
   const { config: avatarConfig } = useAvatarConfig();
 
+  // Debug effect to track component state
+  useEffect(() => {
+    console.log('🔍 VirtualOffice state update:', {
+      userLoaded,
+      avatarConfig: !!avatarConfig,
+      isLoaded,
+      isInitialized,
+      gameEngine: !!gameEngineRef.current
+    });
+  }, [userLoaded, avatarConfig, isLoaded, isInitialized]);
+
   // Game state for UI
   const [connectedUsers, setConnectedUsers] = useState<AvatarData[]>([]);
   const [currentUserId] = useState<string>(() => user?.id || `user-${Date.now()}`);
@@ -61,80 +71,89 @@ export function VirtualOffice() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   // District management state
-  const [showDistrictOverlay, setShowDistrictOverlay] = useState(true); // Activado por defecto
+  const [showDistrictOverlay, setShowDistrictOverlay] = useState(false); // Desactivado por defecto, se activa con botón
   const [showDistrictNavigator, setShowDistrictNavigator] = useState(false);
   const [selectedDistrictId, setSelectedDistrictId] = useState<string | undefined>();
 
-  // District system state
-  const [districtSystemReady, setDistrictSystemReady] = useState(false);
+
   
   // Load district data
   const { data: districts, isLoading: districtsLoading } = useDistricts();
   
-  // Initialize district system AFTER game engine is ready
-  const districtSystem = useDistrictSystem(
-    isInitialized && gameEngineRef.current ? gameEngineRef.current.getApp() : null,
-    isInitialized && gameEngineRef.current ? gameEngineRef.current.getWorldContainer() : null,
-    {
-      enabled: isInitialized && !!gameEngineRef.current,
-      showLabels: true,
-      showBorders: true,
-      opacity: 0.2,
-      interactive: true,
-      onDistrictClick: (district) => {
-        logInfo(LogCategory.DISTRICTS, 'District clicked', { district: district.zoneCode });
-        setSelectedDistrictId(district.id);
-        handleDistrictNavigate(district.bounds);
-      },
-      onDistrictHover: (district) => {
-        logDebug(LogCategory.DISTRICTS, 'District hovered', { district: district.zoneCode });
-      }
-    }
-  );
+  // Estado del sistema de distritos - inicialización directa
+  const [districtSystemReady, setDistrictSystemReady] = useState(false);
+  const [districtSystemInstance, setDistrictSystemInstance] = useState<any>(null);
 
-  // Set up avatar tracking for district detection
+  // Initialize district system when game engine and districts are ready
   useEffect(() => {
-    if (!districtSystem.districtSystem || !gameEngineRef.current || !currentUserId) {
-      return;
+    if (!isInitialized || !gameEngineRef.current || !districts || districtsLoading || districtSystemInstance) {
+      return; // Evitar reinicializar si ya existe
     }
 
-    const ds = districtSystem.districtSystem;
-
-    // Start tracking the current user's avatar
-    ds.startTrackingAvatar(currentUserId);
-    logInfo(LogCategory.DISTRICTS, 'Started tracking avatar for district detection', { avatarId: currentUserId });
-
-    // Set up district change event listener
-    const handleDistrictChange = (event: Event) => {
-      const customEvent = event as CustomEvent<{ current: District | null; previous: District | null }>;
-      const { current, previous } = customEvent.detail;
-
-      setSelectedDistrictId(current?.id);
-
-      logInfo(LogCategory.DISTRICTS, 'Avatar district changed', {
-        previous: previous?.zoneCode || 'none',
-        current: current?.zoneCode || 'none',
-        currentName: current?.name || 'Outside districts'
+    const gameEngine = gameEngineRef.current;
+    
+    console.log('🏗️ Initializing district system...', {
+      districts: districts.length,
+      currentUser: currentUserId
+    });
+    
+    // Initialize district system using GameEngine method
+    const districtSystem = gameEngine.initializeDistrictSystem();
+    
+    if (districtSystem) {
+      logInfo(LogCategory.DISTRICTS, 'District system initialized successfully');
+      
+      // Load districts
+      districtSystem.loadDistricts(districts);
+      
+      // Start tracking current user avatar
+      districtSystem.startTrackingAvatar(currentUserId);
+      
+      // Set initial visibility (respeta el estado actual del botón)
+      districtSystem.setVisible(showDistrictOverlay);
+      
+      // Store instance for later use
+      setDistrictSystemInstance(districtSystem);
+      setDistrictSystemReady(true);
+      
+      console.log('✅ District system ready!', {
+        visible: showDistrictOverlay,
+        tracking: currentUserId
       });
 
-      // You could add a toast notification here or update UI state
-      if (current) {
-        // TODO: Show district notification or update UI
-        console.log(`🏙️ Entered district: ${current.name} (${current.zoneCode})`);
-      } else if (previous) {
-        console.log(`🚶 Left district: ${previous.name} (${previous.zoneCode})`);
-      }
-    };
+      // Set up district change event listener
+      const handleDistrictChange = (event: Event) => {
+        const customEvent = event as CustomEvent<{ current: District | null; previous: District | null }>;
+        const { current, previous } = customEvent.detail;
 
-    window.addEventListener('districtchange', handleDistrictChange);
+        setSelectedDistrictId(current?.id);
 
-    return () => {
-      // Clean up
-      window.removeEventListener('districtchange', handleDistrictChange);
-      ds.stopTrackingAvatar();
-      logDebug(LogCategory.DISTRICTS, 'Cleaned up district tracking');
-    };
-  }, [districtSystem.districtSystem, currentUserId, isInitialized]);
+        logInfo(LogCategory.DISTRICTS, 'Avatar district changed', {
+          previous: previous?.zoneCode || 'none',
+          current: current?.zoneCode || 'none',
+          currentName: current?.name || 'Outside districts'
+        });
+
+        // Show district change notifications
+        if (current) {
+          console.log(`🏙️ Entered district: ${current.name} (${current.zoneCode})`);
+        } else if (previous) {
+          console.log(`🚶 Left district: ${previous.name} (${previous.zoneCode})`);
+        }
+      };
+
+      window.addEventListener('districtchange', handleDistrictChange);
+
+      return () => {
+        // Clean up
+        window.removeEventListener('districtchange', handleDistrictChange);
+        districtSystem.stopTrackingAvatar();
+        logDebug(LogCategory.DISTRICTS, 'Cleaned up district tracking');
+      };
+    } else {
+      console.error('❌ Failed to initialize district system');
+    }
+  }, [isInitialized, districts, districtsLoading, currentUserId, showDistrictOverlay, districtSystemInstance]);
 
   /**
    * Add a real user to the virtual office (would be called via WebSocket)
@@ -315,14 +334,36 @@ export function VirtualOffice() {
     const newValue = !showDistrictOverlay;
     setShowDistrictOverlay(newValue);
     
-    // Use integrated district system
-    if (districtSystem.isReady) {
-      districtSystem.setVisible(newValue);
-      console.log('🏢 Integrated district system toggled to:', newValue);
+    // Primero intentar con la instancia directa
+    if (districtSystemInstance) {
+      districtSystemInstance.setVisible(newValue);
+      console.log('🏢 District system toggled via instance to:', newValue);
+      return;
     }
     
-    console.log('🏢 District overlay toggled to:', newValue);
-  }, [showDistrictOverlay, districtSystem]);
+    // Fallback: intentar obtener desde GameEngine
+    if (gameEngineRef.current) {
+      const districtSystem = gameEngineRef.current.getDistrictSystem();
+      if (districtSystem) {
+        districtSystem.setVisible(newValue);
+        console.log('🏢 District system toggled via GameEngine to:', newValue);
+        return;
+      }
+      
+      // Si no existe, intentar inicializar
+      const newDistrictSystem = gameEngineRef.current.initializeDistrictSystem();
+      if (newDistrictSystem && districts && !districtsLoading) {
+        newDistrictSystem.loadDistricts(districts);
+        newDistrictSystem.setVisible(newValue);
+        newDistrictSystem.startTrackingAvatar(currentUserId);
+        setDistrictSystemInstance(newDistrictSystem);
+        console.log('🏢 District system initialized and toggled to:', newValue);
+        return;
+      }
+    }
+    
+    console.warn('⚠️ District system not available for toggle');
+  }, [showDistrictOverlay, districtSystemInstance, gameEngineRef, districts, districtsLoading, currentUserId]);
 
   /**
    * Toggle district navigator panel
@@ -343,21 +384,24 @@ export function VirtualOffice() {
   }, [selectedParcel, handleParcelUpdate]);
 
   /**
-   * Initialize the game engine - IMPROVED with better condition checking
+   * Initialize the game engine - RESTORED to working version
    */
   useEffect(() => {
     // Check initialization conditions
-    if (!avatarConfig) {
+    if (!avatarConfig || !userLoaded) {
+      console.log('⏳ Waiting for dependencies...', { avatarConfig: !!avatarConfig, userLoaded });
       return;
     }
 
     // Prevent re-initialization if GameEngine already exists
     if (gameEngineRef.current || isInitialized) {
+      console.log('🔄 Game already initialized');
       return;
     }
 
     const initializeGame = async () => {
       try {
+        console.log('🚀 Starting game initialization...');
         const gameEngine = new GameEngine();
         
         if (!containerRef.current) {
@@ -372,7 +416,7 @@ export function VirtualOffice() {
         await gameEngine.init(canvas);
         gameEngineRef.current = gameEngine;
 
-        // Add current user avatar with better fallbacks
+        // Add current user avatar
         const userName = user?.firstName || user?.username || avatarConfig.name || `User-${currentUserId.slice(-4)}`;
         const currentUserData: Omit<AvatarData, 'position' | 'direction'> = {
           id: currentUserId,
@@ -393,14 +437,8 @@ export function VirtualOffice() {
         
         console.log('✅ Game initialization complete');
 
-        // Start game loop immediately after initialization
+        // Start game loop
         await gameEngine.start();
-
-        // Initialize viewport resize manager
-        if (containerRef.current) {
-          const resizeManager = new ViewportResizeManager(gameEngine, containerRef.current);
-          viewportResizeManagerRef.current = resizeManager;
-        }
 
         // Initialize viewport after game setup
         setTimeout(() => {
@@ -412,17 +450,12 @@ export function VirtualOffice() {
             }
           }
         }, 1000);
+
       } catch (error) {
         console.error('❌ Failed to initialize game:', error);
-        if (error instanceof Error) {
-          console.error('❌ Error details:', error.message);
-          console.error('❌ Stack trace:', error.stack);
-        }
-
-        // ✅ IMPROVED: Better error recovery
-        setIsLoaded(true); // Still set to loaded to prevent infinite loading
-
-        // Try to clean up partial initialization
+        setIsLoaded(true); // Prevent infinite loading
+        
+        // Cleanup on error
         if (gameEngineRef.current) {
           try {
             gameEngineRef.current.destroy();
@@ -431,38 +464,68 @@ export function VirtualOffice() {
             console.warn('⚠️ Error during cleanup:', cleanupError);
           }
         }
-
-        // Show user-friendly error message
-        console.log('🔄 Game initialization failed. Please refresh the page to try again.');
       }
     };
 
     initializeGame();
 
-    // Cleanup function - ONLY clean up when component unmounts, not on re-renders
+    // Cleanup function - Improved to prevent DOM errors
     return () => {
-      // Cleanup ViewportResizeManager
+      console.log('🧹 VirtualOffice cleanup triggered');
+      
       if (viewportResizeManagerRef.current) {
-        viewportResizeManagerRef.current.destroy();
+        try {
+          viewportResizeManagerRef.current.destroy();
+        } catch (error) {
+          console.warn('⚠️ Error destroying viewport manager:', error);
+        }
         viewportResizeManagerRef.current = null;
       }
       
       if (gameEngineRef.current) {
-        // Don't set to null immediately - check if we're actually unmounting
-        const shouldCleanup = !containerRef.current || !containerRef.current.isConnected;
-        if (shouldCleanup) {
-          gameEngineRef.current = null;
+        try {
+          // Check if container is still mounted before cleanup
+          const container = containerRef.current;
+          const isStillMounted = container && container.isConnected;
+          
+          if (!isStillMounted) {
+            console.log('🗑️ Container unmounted, cleaning up GameEngine');
+            gameEngineRef.current.destroy();
+            gameEngineRef.current = null;
+            setIsInitialized(false);
+          }
+        } catch (error) {
+          console.warn('⚠️ Error during GameEngine cleanup:', error);
         }
       }
     };
-  }, [avatarConfig, isInitialized, user, currentUserId]); // ✅ Removed userLoaded dependency for faster initialization
+  }, [avatarConfig, isInitialized, user, currentUserId, userLoaded]);
+
+  /**
+   * Handle viewport resize manager setup
+   */
+  useEffect(() => {
+    if (gameEngineRef.current && containerRef.current && isInitialized) {
+      if (!viewportResizeManagerRef.current) {
+        const resizeManager = new ViewportResizeManager(gameEngineRef.current, containerRef.current);
+        viewportResizeManagerRef.current = resizeManager;
+      }
+    }
+
+    return () => {
+      if (viewportResizeManagerRef.current) {
+        viewportResizeManagerRef.current.destroy();
+        viewportResizeManagerRef.current = null;
+      }
+    };
+  }, [isInitialized]);
 
   // Effect to handle district system visibility
   useEffect(() => {
-    if (districtSystem?.isReady && isInitialized) {
-      districtSystem.setVisible(showDistrictOverlay);
+    if (districtSystemInstance && isInitialized) {
+      districtSystemInstance.setVisible(showDistrictOverlay);
     }
-  }, [districtSystem, showDistrictOverlay, isInitialized]);
+  }, [districtSystemInstance, showDistrictOverlay, isInitialized]);
 
   // Effect to render districts on minimap
   useEffect(() => {
@@ -582,11 +645,11 @@ export function VirtualOffice() {
 
   // Sync district system visibility with state
   useEffect(() => {
-    if (districtSystem.isReady) {
-      districtSystem.setVisible(showDistrictOverlay);
+    if (districtSystemInstance) {
+      districtSystemInstance.setVisible(showDistrictOverlay);
       console.log('🏢 District system visibility synced:', showDistrictOverlay);
     }
-  }, [showDistrictOverlay, districtSystem.isReady]);
+  }, [showDistrictOverlay, districtSystemInstance]);
 
   /**
    * Move to specific position (for testing)
@@ -615,6 +678,11 @@ export function VirtualOffice() {
             <p className="text-gray-600" suppressHydrationWarning translate="no">
               Loading Virtual Office...
             </p>
+            <div className="text-xs text-gray-500 mt-2">
+              User: {userLoaded ? '✅' : '⏳'} | 
+              Avatar: {avatarConfig ? '✅' : '⏳'} | 
+              Game: {gameEngineRef.current ? '✅' : '⏳'}
+            </div>
           </div>
         </div>
       )}
@@ -676,14 +744,24 @@ export function VirtualOffice() {
                 Parcelas
               </button>
               <button
-                onClick={toggleDistrictOverlay}
+                onClick={() => {
+                  console.log('🏢 District button clicked!', {
+                    currentState: showDistrictOverlay,
+                    districtSystemInstance: !!districtSystemInstance,
+                    gameEngineReady: !!gameEngineRef.current,
+                    districtsLoaded: !!districts,
+                    districtsCount: districts?.length || 0
+                  });
+                  toggleDistrictOverlay();
+                }}
                 className={`px-3 py-1 text-white rounded text-xs ${
                   showDistrictOverlay 
                     ? 'bg-orange-700 hover:bg-orange-800' 
                     : 'bg-orange-600 hover:bg-orange-700'
                 }`}
+                title={`${showDistrictOverlay ? 'Ocultar' : 'Mostrar'} límites de distritos`}
               >
-                Distritos
+                Distritos {showDistrictOverlay ? '✓' : ''}
               </button>
               <button
                 onClick={toggleDistrictNavigator}

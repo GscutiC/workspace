@@ -51,16 +51,25 @@ export class DistrictSystem {
     this.districtContainer = new Container();
     this.labelContainer = new Container();
     
-    this.districtContainer.name = 'DistrictContainer';
-    this.labelContainer.name = 'DistrictLabelContainer';
+    this.districtContainer.label = 'DistrictContainer';
+    this.labelContainer.label = 'DistrictLabelContainer';
+    
+    // Configurar propiedades de renderizado antes de agregar
+    this.districtContainer.sortableChildren = true;
+    this.labelContainer.sortableChildren = true;
+    this.districtContainer.visible = true;
+    this.labelContainer.visible = true;
     
     // Importante: Agregar a mapContainer, no al stage principal
     this.mapContainer.addChild(this.districtContainer);
     this.mapContainer.addChild(this.labelContainer);
     
-    // Los distritos deben estar debajo del contenido del mapa pero visibles
-    this.districtContainer.zIndex = -1; // Detrás del contenido del mapa
-    this.labelContainer.zIndex = 10; // Encima del contenido
+    // Configurar z-index entre FLOOR y OBJECTS para que sea visible pero no interfiera
+    this.districtContainer.zIndex = 1.5; // Entre FLOOR (1) y OBJECTS (2)
+    this.labelContainer.zIndex = 2.5; // Entre OBJECTS (2) y CHARACTERS (3)
+    
+    // Forzar actualización del sorting
+    this.mapContainer.sortableChildren = true;
     
     logInfo(LogCategory.DISTRICTS, 'DistrictSystem initialized and integrated with map');
   }
@@ -74,11 +83,30 @@ export class DistrictSystem {
     this.districts = districts;
     this.clearAll();
     
+    // Asegurar integridad de contenedores antes de renderizar
+    this.ensureContainersIntegrity();
+    
     districts.forEach(district => {
       this.renderDistrict(district);
     });
     
-    logInfo(LogCategory.DISTRICTS, 'Districts rendered successfully');
+    // Verificar que todos los distritos se renderizaron correctamente
+    const renderedCount = this.districtGraphics.size;
+    if (renderedCount !== districts.length) {
+      logError(LogCategory.DISTRICTS, 'Mismatch in rendered districts', {
+        expected: districts.length,
+        rendered: renderedCount
+      });
+    }
+    
+    logInfo(LogCategory.DISTRICTS, 'Districts rendered successfully', {
+      total: districts.length,
+      rendered: renderedCount,
+      containersVisible: {
+        districts: this.districtContainer.visible,
+        labels: this.labelContainer.visible
+      }
+    });
   }
 
   /**
@@ -111,20 +139,26 @@ export class DistrictSystem {
 
     // Crear gráfico del distrito usando Pixi.js v8 API
     const graphics = new Graphics();
+    graphics.label = `District_${district.zoneCode}`;
     
-    // Use helper for v8 compatible drawing
-    PixiV8Helper.drawFilledRect(
-      graphics,
-      pixelBounds.x,
-      pixelBounds.y,
-      pixelBounds.width,
-      pixelBounds.height,
-      colorInt,
-      this.config.opacity,
-      this.config.showBorders ? colorInt : undefined,
-      this.config.showBorders ? 2 : undefined,
-      0.8
-    );
+    // Configurar propiedades de renderizado persistentes
+    graphics.alpha = 1;
+    graphics.visible = true;
+    graphics.zIndex = 1;
+    
+    // Dibujar el área del distrito con relleno
+    if (this.config.opacity > 0) {
+      graphics.rect(pixelBounds.x, pixelBounds.y, pixelBounds.width, pixelBounds.height)
+             .fill({ color: colorInt, alpha: this.config.opacity });
+    }
+    
+    // Dibujar borde del distrito SIEMPRE (independiente de showBorders para persistencia)
+    graphics.rect(pixelBounds.x, pixelBounds.y, pixelBounds.width, pixelBounds.height)
+           .stroke({ 
+             color: colorInt, 
+             width: this.config.showBorders ? 4 : 2, // Líneas más gruesas y visibles
+             alpha: this.config.showBorders ? 1.0 : 0.7 // Mayor opacidad para mejor visibilidad
+           });
 
     // Configurar interactividad usando helper
     if (this.config.interactive) {
@@ -167,7 +201,21 @@ export class DistrictSystem {
     this.districtContainer.addChild(graphics);
     this.districtGraphics.set(district.id, graphics);
 
-    logDebug(LogCategory.DISTRICTS, `District ${district.zoneCode} rendered`, { bounds: pixelBounds });
+    logInfo(LogCategory.DISTRICTS, `District ${district.zoneCode} rendered successfully`, { 
+      bounds: pixelBounds,
+      graphics: {
+        visible: graphics.visible,
+        alpha: graphics.alpha,
+        zIndex: graphics.zIndex,
+        parent: graphics.parent?.name || 'none'
+      },
+      container: {
+        visible: this.districtContainer.visible,
+        alpha: this.districtContainer.alpha,
+        zIndex: this.districtContainer.zIndex,
+        childrenCount: this.districtContainer.children.length
+      }
+    });
   }
 
   /**
@@ -221,6 +269,44 @@ export class DistrictSystem {
   public setVisible(visible: boolean): void {
     this.districtContainer.visible = visible;
     this.labelContainer.visible = visible && this.config.showLabels;
+    
+    // Asegurar que los contenedores estén correctamente posicionados en el mapa
+    this.ensureContainersIntegrity();
+  }
+
+  /**
+   * Asegurar la integridad de los contenedores del sistema de distritos
+   */
+  public ensureContainersIntegrity(): void {
+    // Verificar que los contenedores estén en el mapa
+    if (!this.districtContainer.parent || this.districtContainer.parent !== this.mapContainer) {
+      if (this.districtContainer.parent) {
+        this.districtContainer.parent.removeChild(this.districtContainer);
+      }
+      this.mapContainer.addChild(this.districtContainer);
+      this.districtContainer.zIndex = 1.5;
+      logInfo(LogCategory.DISTRICTS, 'Restored districtContainer to mapContainer');
+    }
+    
+    if (!this.labelContainer.parent || this.labelContainer.parent !== this.mapContainer) {
+      if (this.labelContainer.parent) {
+        this.labelContainer.parent.removeChild(this.labelContainer);
+      }
+      this.mapContainer.addChild(this.labelContainer);
+      this.labelContainer.zIndex = 2.5;
+      logInfo(LogCategory.DISTRICTS, 'Restored labelContainer to mapContainer');
+    }
+    
+    // Reconfigurar propiedades críticas para persistencia
+    this.districtContainer.zIndex = 1.5; // Entre FLOOR y OBJECTS
+    this.labelContainer.zIndex = 2.5; // Entre OBJECTS y CHARACTERS
+    this.districtContainer.visible = true;
+    this.labelContainer.visible = this.config.showLabels;
+    this.districtContainer.sortableChildren = true;
+    this.labelContainer.sortableChildren = true;
+    
+    // Forzar actualización del sorting si es necesario
+    this.mapContainer.sortableChildren = true;
   }
 
   /**
@@ -233,16 +319,39 @@ export class DistrictSystem {
 
   public setShowBorders(show: boolean): void {
     this.config.showBorders = show;
-    // Rerender todos los distritos
-    this.districts.forEach(district => {
-      const graphics = this.districtGraphics.get(district.id);
-      if (graphics && graphics.parent) {
-        graphics.parent.removeChild(graphics);
-        this.districtGraphics.delete(district.id);
+    
+    // Actualizar el estilo de borde sin re-renderizar completamente
+    this.districtGraphics.forEach((graphics, districtId) => {
+      const district = this.districts.find(d => d.id === districtId);
+      if (!district?.bounds) return;
+      
+      const bounds = district.bounds;
+      const color = this.getDistrictColor(district.zoneCode);
+      const colorInt = parseInt(color.replace('#', '0x'));
+      
+      const pixelBounds = {
+        x: bounds.x1 * TILE_SIZE,
+        y: bounds.y1 * TILE_SIZE,
+        width: (bounds.x2 - bounds.x1) * TILE_SIZE,
+        height: (bounds.y2 - bounds.y1) * TILE_SIZE,
+      };
+      
+      // Redibujar solo cambiando el estilo de borde
+      graphics.clear();
+      
+      // Área del distrito
+      if (this.config.opacity > 0) {
+        graphics.rect(pixelBounds.x, pixelBounds.y, pixelBounds.width, pixelBounds.height)
+               .fill({ color: colorInt, alpha: this.config.opacity });
       }
-    });
-    this.districts.forEach(district => {
-      this.renderDistrict(district);
+      
+      // Borde con nueva configuración
+      graphics.rect(pixelBounds.x, pixelBounds.y, pixelBounds.width, pixelBounds.height)
+             .stroke({ 
+               color: colorInt, 
+               width: show ? 3 : 1,
+               alpha: show ? 0.9 : 0.3
+             });
     });
   }
 
@@ -425,22 +534,56 @@ export class DistrictSystem {
   }
 
   /**
-   * Debug: Información del sistema
+   * Verificar si el sistema está funcionando correctamente
    */
-  public debug(): void {
-    const debugInfo = {
+  public isHealthy(): boolean {
+    return (
+      this.districtContainer?.visible === true &&
+      this.districtContainer?.parent === this.mapContainer &&
+      this.districts.length > 0 &&
+      this.districtGraphics.size === this.districts.length
+    );
+  }
+
+  /**
+   * Obtener información del estado del sistema
+   */
+  public getSystemStatus(): {
+    isHealthy: boolean;
+    districtsLoaded: number;
+    districtsRendered: number;
+    containersVisible: { districts: boolean; labels: boolean };
+    containersAttached: { districts: boolean; labels: boolean };
+  } {
+    return {
+      isHealthy: this.isHealthy(),
       districtsLoaded: this.districts.length,
+      districtsRendered: this.districtGraphics.size,
       containersVisible: {
         districts: this.districtContainer.visible,
         labels: this.labelContainer.visible,
       },
+      containersAttached: {
+        districts: this.districtContainer.parent === this.mapContainer,
+        labels: this.labelContainer.parent === this.mapContainer,
+      }
+    };
+  }
+
+  /**
+   * Debug: Información del sistema
+   */
+  public debug(): void {
+    const debugInfo = {
+      ...this.getSystemStatus(),
       selectedDistrict: this.selectedDistrictId,
       config: this.config,
       mapContainerBounds: {
         x: this.mapContainer.x,
         y: this.mapContainer.y,
         scale: this.mapContainer.scale,
-      }
+      },
+      isHealthy: this.isHealthy(),
     };
     logInfo(LogCategory.DISTRICTS, 'DistrictSystem Debug Info', debugInfo);
   }

@@ -98,8 +98,30 @@ export function useDistrictSystem(
       districtSystem.loadDistricts(districts);
     }
 
+    // Configurar verificación periódica de integridad (cada 5 segundos)
+    const integrityCheck = setInterval(() => {
+      if (districtSystemRef.current) {
+        // Verificar integridad de contenedores
+        districtSystemRef.current.ensureContainersIntegrity();
+        
+        // Si hay distritos cargados, verificar que sigan siendo visibles
+        if (districts && districts.length > 0) {
+          const isHealthy = districtSystemRef.current.isHealthy();
+          
+          if (!isHealthy) {
+            const status = districtSystemRef.current.getSystemStatus();
+            logInfo(LogCategory.DISTRICTS, 'District integrity check failed: reloading districts', { status });
+            districtSystemRef.current.loadDistricts(districts);
+          }
+        }
+      }
+    }, 5000);
+
     // Cleanup
     return () => {
+      // Limpiar verificación periódica
+      clearInterval(integrityCheck);
+      
       window.removeEventListener('districtclick', handleDistrictClick);
       window.removeEventListener('districthover', handleDistrictHover);
 
@@ -158,6 +180,10 @@ export function useDistrictSystem(
     selectDistrict: (id: string | null) => districtSystem?.selectDistrict(id),
     getDistrictAt: (x: number, y: number) => districtSystem?.getDistrictAt(x, y),
     getSelectedDistrict: () => districtSystem?.getSelectedDistrict() || null,
+    
+    // Verificación de salud del sistema
+    isHealthy: () => districtSystem?.isHealthy() || false,
+    getSystemStatus: () => districtSystem?.getSystemStatus() || null,
     
     // Utilidades
     debug: () => districtSystem?.debug(),

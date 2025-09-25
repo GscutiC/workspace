@@ -18,10 +18,13 @@ export class PixiV8Helper {
     fillAlpha: number = 1,
     borderColor?: number,
     borderWidth?: number,
-    borderAlpha?: number
+    borderAlpha?: number,
+    autoClear: boolean = true
   ): Graphics {
-    // Clear previous drawing
-    graphics.clear();
+    // Clear previous drawing only if requested
+    if (autoClear) {
+      graphics.clear();
+    }
 
     // Draw filled rectangle
     if (fillAlpha > 0) {

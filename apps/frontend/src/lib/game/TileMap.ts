@@ -219,20 +219,19 @@ export class TileMap {
    */
   private createParcelSprite(parcel: ParcelInfo): Container {
     const container = new Container();
-    container.name = `Parcel-${parcel.number}`;
+    container.label = `Parcel-${parcel.number}`;
 
-    // Create border graphics with name for event manager - FIXED for Pixi.js v8
+    // Create border graphics - UPDATED for Pixi.js v8
     const border = new Graphics();
-    border.name = 'border';
-    border.lineStyle(2, this.getParcelColor(parcel.type), 1);
-    border.drawRect(parcel.x, parcel.y, parcel.width, parcel.height);
+    border.label = 'border';
+    border.rect(parcel.x, parcel.y, parcel.width, parcel.height)
+          .stroke({ color: this.getParcelColor(parcel.type), width: 2 });
 
-    // Create fill with transparency - FIXED for Pixi.js v8
+    // Create fill with transparency - UPDATED for Pixi.js v8
     const fill = new Graphics();
-    fill.name = 'fill';
-    fill.beginFill(this.getParcelColor(parcel.type), 0.2);
-    fill.drawRect(parcel.x, parcel.y, parcel.width, parcel.height);
-    fill.endFill();
+    fill.label = 'fill';
+    fill.rect(parcel.x, parcel.y, parcel.width, parcel.height)
+        .fill({ color: this.getParcelColor(parcel.type), alpha: 0.2 });
 
     // Create parcel number label with name for event manager - FIXED for Pixi.js v8
     const label = new Text(`P${parcel.number}`, {
@@ -405,15 +404,14 @@ export class TileMap {
     const mapWorldWidth = this.mapData.width * TILE_SIZE;
     const mapWorldHeight = this.mapData.height * TILE_SIZE;
     
-    // Draw outer border - FIXED for Pixi.js v8
-    border.lineStyle(borderWidth, borderColor, 1);
-    border.drawRect(-borderWidth/2, -borderWidth/2, mapWorldWidth + borderWidth, mapWorldHeight + borderWidth);
+    // Draw outer border - UPDATED for Pixi.js v8
+    border.rect(-borderWidth/2, -borderWidth/2, mapWorldWidth + borderWidth, mapWorldHeight + borderWidth)
+          .stroke({ color: borderColor, width: borderWidth });
 
-    // Add semi-transparent background to show map area clearly - FIXED for Pixi.js v8
+    // Add semi-transparent background to show map area clearly - UPDATED for Pixi.js v8
     const background = new Graphics();
-    background.beginFill(0x87CEEB, 0.1); // Very light blue background
-    background.drawRect(0, 0, mapWorldWidth, mapWorldHeight);
-    background.endFill();
+    background.rect(0, 0, mapWorldWidth, mapWorldHeight)
+              .fill({ color: 0x87CEEB, alpha: 0.1 });
     
     // Add background and border to tile container
     this.tileContainer.addChildAt(background, 0); // Add as first child (behind tiles)
@@ -469,16 +467,15 @@ export class TileMap {
       return graphics;
     }
 
-    // ✅ FIXED: Use correct Pixi.js v8 API for Graphics
+    // ✅ UPDATED: Use correct Pixi.js v8 API for Graphics
     graphics.clear();
-    graphics.beginFill(properties.color);
-    graphics.drawRect(0, 0, TILE_SIZE, TILE_SIZE);
-    graphics.endFill();
+    graphics.rect(0, 0, TILE_SIZE, TILE_SIZE)
+            .fill({ color: properties.color });
 
-    // Add border for better visibility with correct v8 API
+    // Add border for better visibility with v8 API
     if (tile.type !== TileType.FLOOR && tile.type !== TileType.STREET) {
-      graphics.lineStyle(1, 0x000000, 1);
-      graphics.drawRect(0, 0, TILE_SIZE, TILE_SIZE);
+      graphics.rect(0, 0, TILE_SIZE, TILE_SIZE)
+              .stroke({ color: 0x000000, width: 1 });
     }
 
     // Set position
@@ -506,8 +503,8 @@ export class TileMap {
           for (let x = 0; x < this.mapData.width; x++) {
             if (row[x]) {
               const graphics = new Graphics();
-              graphics.lineStyle(2, 0xFF0000, 0.5);
-              graphics.drawRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+              graphics.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                      .stroke({ color: 0xFF0000, width: 2, alpha: 0.5 });
 
               this.debugContainer.addChild(graphics);
             }
@@ -814,24 +811,10 @@ export class TileMap {
         return; // No mostrar áreas sin categoría
     }
 
-    // Draw colored overlay
-    graphics.beginFill(color, alpha);
-    graphics.drawRect(
-      tile.x * size,
-      tile.y * size,
-      size,
-      size
-    );
-    graphics.endFill();
-
-    // Add border for better visibility
-    graphics.lineStyle(1, color, 0.8);
-    graphics.drawRect(
-      tile.x * size,
-      tile.y * size,
-      size,
-      size
-    );
+    // Draw colored overlay with border - UPDATED for Pixi.js v8
+    graphics.rect(tile.x * size, tile.y * size, size, size)
+            .fill({ color, alpha })
+            .stroke({ color, width: 1, alpha: 0.8 });
 
     this.debugContainer.addChild(graphics);
   }

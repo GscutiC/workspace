@@ -5,6 +5,7 @@ import { AVATAR_CONFIG } from '@/constants/game';
 import { ObjectPool } from './ObjectPool';
 import { AvatarAnimationSystem } from './AvatarAnimationSystem';
 import { Viewport } from '../Viewport';
+import type { DistrictSystem } from '../DistrictSystem';
 
 /**
  * RenderSystem handles all visual rendering of avatars, effects, and UI elements
@@ -22,6 +23,7 @@ export class RenderSystem {
   private cullingEnabled: boolean = true;
   private cullingMargin: number = 150;
   private debugMode: boolean = false;
+  private districtSystem: DistrictSystem | null = null;
 
   constructor(layers: Map<LayerType, Container>, objectPool: ObjectPool, viewport: Viewport) {
     this.layers = layers;
@@ -32,6 +34,13 @@ export class RenderSystem {
     this.statusIndicators = new Map();
     this.nameLabels = new Map();
     this.animationSystem = new AvatarAnimationSystem();
+  }
+
+  /**
+   * Set district system for avatar position tracking
+   */
+  public setDistrictSystem(districtSystem: DistrictSystem): void {
+    this.districtSystem = districtSystem;
   }
 
   /**
@@ -63,12 +72,12 @@ export class RenderSystem {
     // Ensure container is visible and properly configured
     avatarContainer.visible = true;
     avatarContainer.alpha = 1;
-    avatarContainer.name = `Avatar_${avatar.id}`;
+    avatarContainer.label = `Avatar_${avatar.id}`;
     avatarContainer.zIndex = 100; // High z-index to ensure avatar is visible
     
     // Create animated avatar sprite
     const animatedSprite = this.animationSystem.createAnimatedAvatar(avatar);
-    animatedSprite.name = `Sprite_${avatar.id}`;
+    animatedSprite.label = `Sprite_${avatar.id}`;
     animatedSprite.visible = true;
     animatedSprite.alpha = 1;
     animatedSprite.zIndex = 1;
@@ -129,6 +138,11 @@ export class RenderSystem {
         
         // Update animation system position
         this.animationSystem.updatePosition(userId, avatar.position);
+        
+        // 🔥 CONEXIÓN CRÍTICA: Notificar al DistrictSystem sobre el movimiento del avatar
+        if (this.districtSystem) {
+          this.districtSystem.updateAvatarPosition(userId, avatar.position.x, avatar.position.y);
+        }
       }
     });
   }

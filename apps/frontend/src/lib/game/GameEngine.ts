@@ -254,6 +254,9 @@ export class GameEngine {
     // Show parcel numbers by default to help with identification
     this.tileMap.toggleParcelVisibility();
 
+    // CRÍTICO: Marcar sistemas como inicializados para permitir conexión con DistrictSystem
+    this.gameState.isInitialized = true;
+
     } catch (error) {
       console.error('❌ Failed to initialize game systems:', error);
       if (error instanceof Error) {
@@ -1284,6 +1287,8 @@ export class GameEngine {
     }
 
     if (this.districtSystem) {
+      // Si ya existe, asegurar conexión con RenderSystem
+      this.connectDistrictSystemToRenderSystem();
       return this.districtSystem;
     }
 
@@ -1297,11 +1302,27 @@ export class GameEngine {
         opacity: 0.2,
         interactive: true,
       });
+
+      // 🔥 CONEXIÓN CRÍTICA: Conectar DistrictSystem con RenderSystem
+      this.connectDistrictSystemToRenderSystem();
       
       return this.districtSystem;
     } catch (error) {
       console.error('❌ Failed to initialize DistrictSystem:', error);
       return null;
+    }
+  }
+
+  /**
+   * Conectar el DistrictSystem al RenderSystem para tracking de avatares
+   */
+  private connectDistrictSystemToRenderSystem(): void {
+    if (this.districtSystem && this.systems.has('render')) {
+      const renderSystem = this.systems.get('render') as any; // RenderSystem
+      if (renderSystem && typeof renderSystem.setDistrictSystem === 'function') {
+        renderSystem.setDistrictSystem(this.districtSystem);
+        console.log('✅ DistrictSystem connected to RenderSystem for avatar tracking');
+      }
     }
   }
 
