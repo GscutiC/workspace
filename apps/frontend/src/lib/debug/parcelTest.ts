@@ -38,7 +38,7 @@ async function testParcelAPI() {
     console.error('❌ API Test failed:', error);
     return {
       apiWorking: false,
-      error: error.message
+      error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
 }
@@ -47,7 +47,7 @@ async function testParcelAPI() {
 if (typeof window !== 'undefined') {
   console.log('🌐 Browser environment detected');
   console.log('💡 Run testParcelAPI() to test the integration');
-  window.testParcelAPI = testParcelAPI;
+  (window as any).testParcelAPI = testParcelAPI;
 } else {
   console.log('📦 Node environment - this is a browser test script');
 }

@@ -1,6 +1,7 @@
 import { GraphQLClient } from 'graphql-request';
 
-export const graphqlClient = new GraphQLClient('http://localhost:3000/graphql', {
+// Fix: Correct backend URL (backend runs on port 3001)
+export const graphqlClient = new GraphQLClient('http://localhost:3001/graphql', {
   headers: {
     'Content-Type': 'application/json',
   },

@@ -39,9 +39,9 @@ export class ViewportResizeManager {
     const sidebar = this.detectSidebarElement();
     
     let availableWidth = containerRect.width;
-    let availableHeight = containerRect.height;
+    const availableHeight = containerRect.height;
     let offsetX = 0;
-    let offsetY = 0;
+    const offsetY = 0;
 
     // Si hay sidebar visible, ajustar dimensiones
     if (sidebar && this.isSidebarVisible(sidebar)) {

@@ -1,17 +1,47 @@
 import { useQuery } from '@tanstack/react-query';
 import { graphqlClient, GET_DISTRICTS, GET_DISTRICTS_BY_SPACE, GET_DISTRICT_STATS, District, DistrictStats } from '@/lib/graphql';
+import { logDebug, logInfo, logError, LogCategory } from '@/lib/utils/logger';
+import { DistrictValidator, DISTRICT_CONFIG } from '@/lib/game/config/DistrictConfig';
 
 export const useDistricts = () => {
   return useQuery({
     queryKey: ['districts'],
     queryFn: async () => {
-      const data = await graphqlClient.request<{ districts: District[] }>(GET_DISTRICTS);
-      console.log('✅ Districts loaded:', data.districts.length);
-      return data.districts;
+      logDebug(LogCategory.GRAPHQL, 'Making GraphQL request for districts');
+      try {
+        const data = await graphqlClient.request<{ districts: District[] }>(GET_DISTRICTS);
+        
+        // Validate and sanitize district data
+        const validDistricts = DistrictValidator.sanitizeDistricts(data.districts);
+        
+        if (validDistricts.length !== data.districts.length) {
+          logError(LogCategory.DISTRICTS, 'Some districts failed validation', {
+            total: data.districts.length,
+            valid: validDistricts.length,
+            invalid: data.districts.length - validDistricts.length
+          });
+        }
+        
+        logInfo(LogCategory.DISTRICTS, 'Districts loaded successfully', {
+          count: validDistricts.length,
+          firstDistrict: validDistricts[0] ? {
+            id: validDistricts[0].id,
+            zoneCode: validDistricts[0].zoneCode,
+            name: validDistricts[0].name,
+            bounds: validDistricts[0].bounds
+          } : null
+        });
+        
+        return validDistricts;
+      } catch (error) {
+        logError(LogCategory.GRAPHQL, 'Error loading districts', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Failed to load districts: ${errorMessage}`);
+      }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: 3,
-    retryDelay: 1000,
+    staleTime: DISTRICT_CONFIG.cacheTimeout,
+    retry: DISTRICT_CONFIG.retryAttempts,
+    retryDelay: DISTRICT_CONFIG.retryDelay,
   });
 };
 

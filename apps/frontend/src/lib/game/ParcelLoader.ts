@@ -17,7 +17,7 @@ export class ParcelLoader {
    */
   static async loadRealParcels(): Promise<ParcelInfo[]> {
     try {
-      console.log('🏗️ Loading real parcels from API...');
+      // Loading real parcels from API
       
       const url = `${API_BASE_URL}/parcels?organizationId=${DEFAULT_ORG_ID}&spaceId=${DEFAULT_SPACE_ID}&limit=100`;
       const response = await fetch(url);
@@ -45,15 +45,15 @@ export class ParcelLoader {
         // Validate the new position
         const validation = ParcelMigration.validateParcelPosition(newCoords);
         if (!validation.isValid) {
-          console.warn(`⚠️ Parcel ${parcel.number} has position issues:`, validation.issues);
+          console.warn(`⚠️ Parcel ${parcel.number} has position issues:`, validation.error);
         }
         
         return {
           number: parcel.number,
           x: newCoords.x,
           y: newCoords.y,
-          width: newCoords.width,
-          height: newCoords.height,
+          width: newCoords.width ?? parcel.width,
+          height: newCoords.height ?? parcel.height,
           type: this.mapParcelType(parcel.parcelType),
           districtType: this.mapParcelTypeToDistrict(parcel.parcelType),
           buildingType: parcel.buildingType || 'EMPTY',
@@ -77,7 +77,7 @@ export class ParcelLoader {
         };
       });
       
-      console.log(`✅ Loaded ${gameParcels.length} real parcels from API`);
+      // Loaded real parcels from API
       return gameParcels;
       
     } catch (error) {
@@ -138,7 +138,7 @@ export class ParcelLoader {
    * This ensures the game still works even if the backend is down
    */
   static createFallbackParcels(): ParcelInfo[] {
-    console.log('⚠️ Creating fallback parcels due to API failure');
+    // Creating fallback parcels due to API failure
     
     const fallbackParcels: ParcelInfo[] = [];
     
@@ -161,7 +161,7 @@ export class ParcelLoader {
       }
     }
     
-    console.log(`⚠️ Created ${fallbackParcels.length} fallback parcels`);
+    // Created fallback parcels
     return fallbackParcels;
   }
 }

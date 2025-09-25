@@ -29,11 +29,11 @@ export function useAvatarConfig() {
       if (saved) {
         const parsed = JSON.parse(saved) as AvatarConfig;
         setConfig(parsed);
-        console.log('🎨 Loaded saved avatar config:', parsed);
+        // Loaded saved avatar config
       } else {
         // ✅ Use default config immediately, don't wait
         setConfig(DEFAULT_AVATAR_CONFIG);
-        console.log('🎨 Using default avatar config - no saved config found');
+        // Using default avatar config - no saved config found
       }
     } catch (error) {
       console.error('❌ Error loading avatar config:', error);
@@ -53,7 +53,7 @@ export function useAvatarConfig() {
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(configToSave));
       setConfig(configToSave);
-      console.log('🎨 Saved avatar config:', configToSave);
+      // Saved avatar config
       
       // Dispatch custom event for real-time updates
       window.dispatchEvent(new CustomEvent('avatarConfigChanged', {
@@ -67,8 +67,8 @@ export function useAvatarConfig() {
   // Clear configuration
   const clearConfig = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
-    setConfig(null);
-    console.log('🎨 Cleared avatar config');
+    setConfig(DEFAULT_AVATAR_CONFIG);
+    // Cleared avatar config
   }, []);
 
   useEffect(() => {
@@ -85,7 +85,7 @@ export function useAvatarConfig() {
 
     const handleConfigChange = (e: CustomEvent) => {
       setConfig(e.detail);
-      console.log('🎨 Avatar config changed externally:', e.detail);
+      // Avatar config changed externally
     };
 
     window.addEventListener('storage', handleStorageChange);

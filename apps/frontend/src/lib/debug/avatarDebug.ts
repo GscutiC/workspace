@@ -5,11 +5,29 @@
 
 import type {
   GameEngineDebugInterface,
-  AvatarDebugResult,
-  isDebugCapableEngine,
-  isValidDebugViewport,
-  isValidAvatarData
+  AvatarDebugResult
 } from '@/types/debug';
+
+// Simple type guards without importing functions
+function isDebugCapableEngine(engine: any): engine is GameEngineDebugInterface {
+  return engine && 
+         typeof engine.getGameState === 'function' && 
+         typeof engine.getViewport === 'function' &&
+         typeof engine.getWorldContainer === 'function';
+}
+
+function isValidDebugViewport(viewport: any): boolean {
+  return viewport && 
+         typeof viewport.worldToScreen === 'function' &&
+         viewport.state;
+}
+
+function isValidAvatarData(avatar: any): boolean {
+  return avatar && 
+         avatar.position && 
+         typeof avatar.position.x === 'number' && 
+         typeof avatar.position.y === 'number';
+}
 
 export class AvatarDebug {
   /**

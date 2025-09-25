@@ -42,7 +42,7 @@ export class MovementController {
     // Calculate target position based on key
     const targetPosition = this.calculateKeyboardTarget(key, avatar);
     if (!targetPosition) {
-      console.log('❓ No movement direction for key:', key);
+      // No movement direction for key
       return;
     }
 
@@ -68,7 +68,7 @@ export class MovementController {
    * Unified movement execution
    */
   private executeMovement(userId: string, targetPosition: Position, source: 'keyboard' | 'mouse'): void {
-    console.log(`🎯 MovementController: ${source} movement to`, targetPosition, 'for user:', userId);
+    // Movement initiated for user
 
     const avatar = this.gameState.avatars.get(userId);
     if (!avatar) return;
@@ -77,16 +77,16 @@ export class MovementController {
     if (source === 'keyboard') {
       const direction = this.calculateDirection(avatar.position, targetPosition);
       avatar.direction = direction;
-      console.log('🧭 Direction set to:', direction);
+      // Direction set
     }
 
     // Use MovementSystem for pathfinding and movement
     const success = this.movementSystem.moveToPosition(userId, targetPosition);
     
     if (success) {
-      console.log('✅ Movement initiated successfully');
+      // Movement initiated successfully
     } else {
-      console.log('❌ Movement failed');
+      // Movement failed
     }
 
     // Force immediate position update for keyboard (small movements)
@@ -109,7 +109,7 @@ export class MovementController {
 
     // If it's a small step (typical keyboard movement), apply immediately
     if (distance <= MOVEMENT_CONFIG.keyboardMoveSpeed / 60) {
-      console.log('⚡ Applying immediate keyboard movement');
+      // Applying immediate keyboard movement
       
       // Validate the movement first
       if (this.movementSystem.isValidMove(avatar.position, targetPosition, userId)) {
@@ -119,9 +119,9 @@ export class MovementController {
         // Stop any ongoing pathfinding movement
         this.movementSystem.stopMovement(userId);
         
-        console.log('📍 Position updated to:', avatar.position);
+        // Position updated
       } else {
-        console.log('❌ Immediate movement blocked');
+        // Immediate movement blocked
       }
     }
   }

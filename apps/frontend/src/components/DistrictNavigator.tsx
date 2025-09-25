@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useDistricts, DISTRICT_COLORS } from '@/hooks/useDistricts';
+import type { District } from '@/lib/graphql';
 
 interface DistrictNavigatorProps {
   selectedDistrictId?: string;
@@ -39,7 +40,7 @@ export const DistrictNavigator: React.FC<DistrictNavigatorProps> = ({
   // Get unique district types
   const districtTypes = Array.from(new Set(districts.map(d => d.districtType)));
 
-  const handleDistrictClick = (district: any) => {
+  const handleDistrictClick = (district: District) => {
     onDistrictSelect(district.id);
     onDistrictNavigate(district.bounds);
   };
@@ -127,7 +128,7 @@ export const DistrictNavigator: React.FC<DistrictNavigatorProps> = ({
                   <div className="mt-2 flex items-center space-x-4 text-xs text-gray-500">
                     <span>Parcelas: {district.parcels.length}</span>
                     <span>
-                      Ocupadas: {district.parcels.filter(p => p.status === 'occupied').length}
+                      Ocupadas: {district.parcels.filter((p: { status: string }) => p.status === 'occupied').length}
                     </span>
                   </div>
                 )}

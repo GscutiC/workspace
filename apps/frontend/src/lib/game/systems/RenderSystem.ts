@@ -57,7 +57,6 @@ export class RenderSystem {
    * Create avatar visual representation
    */
   public createAvatar(avatar: AvatarData): void {
-    console.log(`🎨 Creating avatar: ${avatar.name} (${avatar.id})`);
     
     const avatarContainer = this.objectPool.getAvatarContainer();
 
@@ -108,23 +107,6 @@ export class RenderSystem {
     const characterLayer = this.layers.get(LayerType.CHARACTERS);
     if (characterLayer) {
       characterLayer.addChild(avatarContainer);
-      console.log(`✅ Avatar ${avatar.name} added to scene at (${avatar.position.x}, ${avatar.position.y})`);
-      
-      // Debug information
-      console.log(`🔍 Avatar container debug:`, {
-        visible: avatarContainer.visible,
-        alpha: avatarContainer.alpha,
-        scale: avatarContainer.scale,
-        zIndex: avatarContainer.zIndex,
-        children: avatarContainer.children.length
-      });
-      
-      console.log(`🔍 Character layer debug:`, {
-        visible: characterLayer.visible,
-        alpha: characterLayer.alpha,
-        zIndex: characterLayer.zIndex,
-        children: characterLayer.children.length
-      });
     } else {
       console.error('❌ CHARACTERS layer not found!');
     }
@@ -287,7 +269,6 @@ export class RenderSystem {
    * Create name label for avatar
    */
   private createNameLabel(name: string, color: number): Text {
-    console.log('🎨 Creating name label with text:', name);
     
     const nameLabel = new Text({
       text: name,
@@ -311,8 +292,6 @@ export class RenderSystem {
     nameLabel.visible = true;
     nameLabel.alpha = 1.0;
     
-    console.log('🎨 Name label created with dimensions:', nameLabel.width, 'x', nameLabel.height);
-    console.log('🎨 Name label text content:', nameLabel.text);
     
     return nameLabel;
   }
@@ -493,8 +472,6 @@ export class RenderSystem {
     };
 
     if (this.debugMode) {
-      console.log(`🔍 Culling bounds:`, visibleBounds);
-      console.log(`📐 Viewport bounds:`, viewportBounds);
     }
 
     // Hide/show avatars based on visibility with improved logging
@@ -506,9 +483,7 @@ export class RenderSystem {
       const isVisible = this.isPositionInBounds(avatar.position, visibleBounds);
       
       if (wasVisible !== isVisible || this.debugMode) {
-        console.log(`👁️ Avatar ${avatar.name} visibility: ${wasVisible} -> ${isVisible} at (${avatar.position.x}, ${avatar.position.y})`);
         if (this.debugMode) {
-          console.log(`� Position in bounds: x(${avatar.position.x} in ${visibleBounds.x}-${visibleBounds.x + visibleBounds.width}) y(${avatar.position.y} in ${visibleBounds.y}-${visibleBounds.y + visibleBounds.height})`);
         }
       }
       
@@ -520,7 +495,6 @@ export class RenderSystem {
    * Enable or disable frustum culling
    */
   public setCullingEnabled(enabled: boolean): void {
-    console.log(`🎛️ Frustum culling ${enabled ? 'enabled' : 'disabled'}`);
     this.cullingEnabled = enabled;
   }
 
@@ -528,7 +502,6 @@ export class RenderSystem {
    * Set culling margin for fine-tuning
    */
   public setCullingMargin(margin: number): void {
-    console.log(`📏 Culling margin set to: ${margin}px`);
     this.cullingMargin = margin;
   }
 
@@ -536,7 +509,6 @@ export class RenderSystem {
    * Enable or disable debug mode
    */
   public setDebugMode(enabled: boolean): void {
-    console.log(`🐛 Debug mode ${enabled ? 'enabled' : 'disabled'}`);
     this.debugMode = enabled;
   }
 

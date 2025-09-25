@@ -1,8 +1,11 @@
-import { Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js';
-import type { GameState, Position, AvatarData } from '@/types/game';
-import { TileType, LayerType } from '@/types/game';
-import { TILE_SIZE, MAP_WIDTH, MAP_HEIGHT } from '@/constants/game';
+import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import type { GameState, Position } from '@/types/game';
+import { TileType } from '@/types/game';
+import { TILE_SIZE } from '@/constants/game';
 import type { TileMap } from '../TileMap';
+import { logError, LogCategory } from '@/lib/utils/logger';
+import { runMinimapDiagnostic, MinimapDiagnostic, type MinimapDiagnosticResult } from '@/lib/debug/minimapDiagnostic';
+import type { District } from '@/lib/graphql';
 
 /**
  * MinimapSystem handles minimap rendering and navigation
@@ -15,6 +18,8 @@ export class MinimapSystem {
   private viewportIndicator!: Graphics;
   private background!: Graphics;
   private titleText!: Text;
+  private districtGraphics!: Graphics;
+  private districts: District[] = [];
   private tileMap: TileMap;
   private gameState: GameState;
   
@@ -64,7 +69,11 @@ export class MinimapSystem {
     AVATAR_SELF: 0xEF4444,
     AVATAR_OTHER: 0x3B82F6,
     VIEWPORT: 0xFBBF24,
-    BORDER: 0x1A202C
+    BORDER: 0x1A202C,
+    
+    // District colors
+    DISTRICT_BORDER: 0xFFFFFF,
+    DISTRICT_FILL: 0x000000
   };
 
   private onMinimapMoveAvatar?: (worldPosition: Position) => void;
@@ -74,11 +83,17 @@ export class MinimapSystem {
     this.tileMap = tileMap;
     this.gameState = gameState;
     
-    // Calculate scale factor to fit the entire map
+    // Calculate scale factor based on actual district boundaries (0-192, 0-144 tiles)
+    // This matches the backend district data which has maximum bounds of (192, 144)
+    const ACTUAL_MAP_WIDTH = 192; // tiles - matches backend district bounds
+    const ACTUAL_MAP_HEIGHT = 144; // tiles - matches backend district bounds
+
     this.SCALE_FACTOR = Math.min(
-      this.MINIMAP_WIDTH / (MAP_WIDTH * TILE_SIZE),
-      this.MINIMAP_HEIGHT / (MAP_HEIGHT * TILE_SIZE)
+      this.MINIMAP_WIDTH / (ACTUAL_MAP_WIDTH * TILE_SIZE),
+      this.MINIMAP_HEIGHT / (ACTUAL_MAP_HEIGHT * TILE_SIZE)
     );
+
+    // Scale factor calculated silently
     
     this.TILE_SIZE_MINI = TILE_SIZE * this.SCALE_FACTOR;
     
@@ -117,6 +132,9 @@ export class MinimapSystem {
     // Map graphics (static elements)
     this.mapGraphics = new Graphics();
     
+    // District graphics (district boundaries)
+    this.districtGraphics = new Graphics();
+    
     // Avatar graphics (dynamic elements)
     this.avatarGraphics = new Graphics();
     
@@ -145,6 +163,7 @@ export class MinimapSystem {
     // Add to container in correct order
     this.container.addChild(this.background);
     this.container.addChild(this.mapGraphics);
+    this.container.addChild(this.districtGraphics);
     this.container.addChild(this.avatarGraphics);
     this.container.addChild(this.viewportIndicator);
     this.container.addChild(this.titleText);
@@ -179,14 +198,12 @@ export class MinimapSystem {
         if (this.onMinimapMoveAvatar) {
           this.onMinimapMoveAvatar(worldPosition);
         }
-        console.log('🗺️ Minimap: Moving avatar to:', worldPosition);
       } else if (button === 2) {
         // Right click: Move camera
         this.showClickFeedback(localPoint.x, localPoint.y, 'camera');
         if (this.onMinimapMoveCamera) {
           this.onMinimapMoveCamera(worldPosition);
         }
-        console.log('🗺️ Minimap: Moving camera to:', worldPosition);
       }
     });
     
@@ -469,6 +486,153 @@ export class MinimapSystem {
   }
 
   /**
+   * Render district boundaries on the minimap
+   */
+  public renderDistricts(districts: District[]): void {
+
+    // Comprehensive validation
+    if (!this.districtGraphics) {
+      logError(LogCategory.MINIMAP, 'CRITICAL: districtGraphics not initialized!');
+      return;
+    }
+
+    if (!districts || !Array.isArray(districts)) {
+      logError(LogCategory.MINIMAP, 'CRITICAL: Invalid districts data', { districts });
+      return;
+    }
+
+    if (districts.length === 0) {
+      logError(LogCategory.MINIMAP, 'CRITICAL: Districts array is empty!');
+      return;
+    }
+
+    // Store districts
+    this.districts = districts;
+
+    // Clear previous graphics
+    this.districtGraphics.clear();
+
+    districts.forEach((district, index) => {
+      // Validate individual district
+      if (!district.bounds) {
+        logError(LogCategory.MINIMAP, `District ${index} missing bounds`, district);
+        return;
+      }
+
+      // FIXED: Convert district bounds (from backend) to minimap coordinates
+      // Districts from backend have bounds: { x1, y1, x2, y2 } in tile coordinates
+      // We need to convert to world pixels first, then to minimap coordinates
+      const worldX1 = district.bounds.x1 * 32; // TILE_SIZE = 32
+      const worldY1 = district.bounds.y1 * 32;
+      const worldX2 = district.bounds.x2 * 32;
+      const worldY2 = district.bounds.y2 * 32;
+
+      // Convert to minimap coordinates
+      const miniX = worldX1 * this.SCALE_FACTOR;
+      const miniY = worldY1 * this.SCALE_FACTOR;
+      const miniWidth = (worldX2 - worldX1) * this.SCALE_FACTOR;
+      const miniHeight = (worldY2 - worldY1) * this.SCALE_FACTOR;
+
+      // Use different colors for each district
+      const colors = [
+        0xFF4444, 0x44FF44, 0x4444FF, 0xFFFF44,
+        0xFF44FF, 0x44FFFF, 0xFFA500, 0x800080,
+        0x008000, 0x800000, 0x000080, 0x808000,
+        0x808080, 0xC0C0C0, 0xFFC0CB, 0x90EE90
+      ];
+      
+      const districtColor = colors[index % colors.length];
+
+      // Draw district boundary with validation
+      try {
+        this.districtGraphics
+          .rect(miniX, miniY, miniWidth, miniHeight)
+          .fill({ color: districtColor, alpha: 0.2 })
+          .stroke({
+            width: 2,
+            color: districtColor,
+            alpha: 0.8
+          });
+
+      } catch (error) {
+        logError(LogCategory.MINIMAP, `Failed to draw district ${index + 1}`, error);
+      }
+
+      // Add district name if available
+      if (district.name) {
+        const nameStyle = new TextStyle({
+          fontFamily: 'Arial',
+          fontSize: 8,
+          fill: 0xFFFFFF,
+          fontWeight: 'bold',
+          dropShadow: {
+            color: 0x000000,
+            blur: 1,
+            alpha: 0.8,
+            distance: 1
+          }
+        });
+
+        const nameText = new Text({ 
+          text: district.name, 
+          style: nameStyle 
+        });
+        nameText.anchor.set(0.5, 0.5);
+        nameText.x = miniX + miniWidth / 2;
+        nameText.y = miniY + miniHeight / 2;
+        
+        try {
+          this.districtGraphics.addChild(nameText);
+        } catch (error) {
+          logError(LogCategory.MINIMAP, `Failed to add text for district ${index + 1}`, error);
+        }
+      }
+    });
+
+  }
+
+  /**
+   * Run diagnostic on current minimap state
+   */
+  public async runDiagnostic(): Promise<MinimapDiagnosticResult> {
+
+    const result = await runMinimapDiagnostic(this.districts as District[]);
+    const diagnostic = MinimapDiagnostic.getInstance();
+    diagnostic.logDiagnosticReport(result);
+
+    return result;
+  }
+
+  /**
+   * Complete debug session - run all debug functions
+   */
+  public debugSession() {
+
+    // 1. Basic status
+    const status = this.getStatus();
+
+    // 2. Test rendering capability
+    const canRender = this.testRendering();
+
+    // 3. Force visual debug
+    this.forceVisualDebug();
+
+    // 4. Try to render districts if we have them
+    if (this.districts && this.districts.length > 0) {
+      this.renderDistricts(this.districts);
+    }
+
+
+    return {
+      status,
+      canRender,
+      hasDistricts: !!(this.districts && this.districts.length > 0),
+      districtCount: this.districts?.length || 0,
+      debugRendered: true
+    };
+  }
+
+  /**
    * Set minimap visibility
    */
   public setVisible(visible: boolean): void {
@@ -490,6 +654,95 @@ export class MinimapSystem {
    */
   public refreshMap(): void {
     this.renderStaticMap();
+  }
+
+  /**
+   * Test if minimap can render districts
+   */
+  public testRendering(): boolean {
+    const canRender = !!(this.districtGraphics && this.districts && this.districts.length > 0);
+    return canRender;
+  }
+
+  /**
+   * Debug visual - render a simple test rectangle to confirm minimap works
+   */
+  public renderDebugRect(): void {
+    if (!this.districtGraphics) {
+      logError(LogCategory.MINIMAP, 'Cannot render debug rect - districtGraphics not initialized');
+      return;
+    }
+
+    // Clear and render a bright test rectangle
+    this.districtGraphics.clear();
+    this.districtGraphics
+      .rect(10, 10, 50, 30)
+      .fill({ color: 0xFF0000, alpha: 0.8 })
+      .stroke({ width: 2, color: 0xFFFFFF, alpha: 1.0 });
+
+  }
+
+  /**
+   * Force visual debug - render test elements to confirm rendering pipeline
+   */
+  public forceVisualDebug(): void {
+    if (!this.districtGraphics) {
+      logError(LogCategory.MINIMAP, 'Cannot force visual debug - districtGraphics not initialized');
+      return;
+    }
+
+
+    // Clear all
+    this.districtGraphics.clear();
+
+    // Render corner markers
+    const colors = [0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00];
+    const positions = [
+      { x: 5, y: 5, label: 'TL' },
+      { x: this.MINIMAP_WIDTH - 15, y: 5, label: 'TR' },
+      { x: 5, y: this.MINIMAP_HEIGHT - 15, label: 'BL' },
+      { x: this.MINIMAP_WIDTH - 15, y: this.MINIMAP_HEIGHT - 15, label: 'BR' }
+    ];
+
+    positions.forEach((pos, index) => {
+      this.districtGraphics
+        .rect(pos.x, pos.y, 10, 10)
+        .fill({ color: colors[index], alpha: 0.8 })
+        .stroke({ width: 1, color: 0xFFFFFF });
+    });
+
+    // Render center cross
+    const centerX = this.MINIMAP_WIDTH / 2;
+    const centerY = this.MINIMAP_HEIGHT / 2;
+
+    this.districtGraphics
+      .rect(centerX - 1, centerY - 10, 2, 20)
+      .fill({ color: 0xFFFFFF, alpha: 1.0 })
+      .rect(centerX - 10, centerY - 1, 20, 2)
+      .fill({ color: 0xFFFFFF, alpha: 1.0 });
+
+    // Make sure it's visible
+    this.container.visible = true;
+    this.districtGraphics.visible = true;
+
+  }
+
+  /**
+   * Get current minimap status for debugging
+   */
+  public getStatus() {
+    return {
+      initialized: !!this.container,
+      hasDistrictGraphics: !!this.districtGraphics,
+      districtsLoaded: !!(this.districts && this.districts.length > 0),
+      districtCount: this.districts?.length || 0,
+      visible: this.container?.visible || false,
+      scaleFactor: this.SCALE_FACTOR,
+      dimensions: {
+        width: this.MINIMAP_WIDTH,
+        height: this.MINIMAP_HEIGHT
+      }
+    };
   }
 
   /**

@@ -34,12 +34,6 @@ export class CityGenerator {
     config: CityConfig,
     parcelsOutput?: ParcelInfo[]
   ): void {
-    console.log('🏗️ Generating structured city blocks with config:', {
-      blockSize: config.blockSize,
-      avenueSpacing: config.avenueSpacing,
-      mainStreetWidth: config.mainStreetWidth
-    });
-    
     // 1. Create main avenue grid
     this.generateMainAvenues(tiles, config.avenueSpacing, config.mainStreetWidth);
     
@@ -49,9 +43,7 @@ export class CityGenerator {
     // 3. Fill blocks with buildings and districts (and collect parcel data)
     this.generateDistrictBlocks(tiles, obstacles, config, parcelsOutput);
     
-    console.log('✅ Structured city blocks generated!');
     if (parcelsOutput) {
-      console.log(`📦 Generated ${parcelsOutput.length} parcels`);
     }
   }
 
@@ -65,11 +57,6 @@ export class CityGenerator {
     config: CityConfig,
     realParcels: ParcelInfo[]
   ): void {
-    console.log('🏗️ Generating city with real parcels integration:', {
-      parcelCount: realParcels.length,
-      blockSize: config.blockSize
-    });
-    
     // 1. First generate basic street grid (this doesn't conflict with parcels)
     this.generateMainAvenues(tiles, config.avenueSpacing, config.mainStreetWidth);
     this.generateSecondaryStreets(tiles, config.blockSize, config.secondaryStreetWidth);
@@ -82,7 +69,6 @@ export class CityGenerator {
     // 3. Fill remaining areas with generated content
     this.fillRemainingAreasWithBuildings(tiles, obstacles, config, realParcels);
     
-    console.log('✅ City generated with real parcels integrated!');
   }
   
   /**

@@ -1,6 +1,7 @@
 import { Container } from 'pixi.js';
 import type { Position, ViewportConfig, ViewportState } from '@/types/game';
 import { VIEWPORT_CONFIG } from '@/constants/game';
+import { logDebug, LogCategory } from '@/lib/utils/logger';
 
 /**
  * Viewport manages camera movement, zoom, and world transformations
@@ -43,20 +44,20 @@ export class Viewport {
    * Move camera to specific world position
    */
   public moveTo(worldPos: Position, immediate: boolean = false): void {
-    console.log('📷 Viewport.moveTo called:', { worldPos, immediate, currentState: this.state });
-    
+    logDebug(LogCategory.VIEWPORT, 'moveTo called', { worldPos, immediate, currentState: this.state });
+
     const targetX = this.clampX(worldPos.x);
     const targetY = this.clampY(worldPos.y);
 
-    console.log('📷 Clamped target position:', { targetX, targetY });
+    logDebug(LogCategory.VIEWPORT, 'Clamped target position', { targetX, targetY });
 
     this.state.x = targetX;
     this.state.y = targetY;
-    
+
     // Always apply transform immediately for now to debug
     this.applyTransform();
-    
-    console.log('📷 Viewport moved to:', { x: targetX, y: targetY });
+
+    logDebug(LogCategory.VIEWPORT, 'Viewport moved to position', { x: targetX, y: targetY });
   }
 
   /**
@@ -261,7 +262,7 @@ export class Viewport {
     const newX = centerX - this.state.x * this.state.zoom;
     const newY = centerY - this.state.y * this.state.zoom;
 
-    console.log('📷 Applying viewport transform:', {
+    logDebug(LogCategory.VIEWPORT, 'Applying viewport transform', {
       state: this.state,
       newScale,
       newPosition: { x: newX, y: newY },
@@ -276,7 +277,7 @@ export class Viewport {
     this.worldContainer.scale.set(newScale);
     this.worldContainer.position.set(newX, newY);
 
-    console.log('📷 Viewport transform applied:', {
+    logDebug(LogCategory.VIEWPORT, 'Viewport transform applied', {
       worldContainerAfter: {
         x: this.worldContainer.x,
         y: this.worldContainer.y,
@@ -361,7 +362,7 @@ export class Viewport {
     const centerX = this.bounds.width / 2;
     const centerY = this.bounds.height / 2;
     
-    console.log('📷 Centering on map:', {
+    logDebug(LogCategory.VIEWPORT, 'Centering on map', {
       bounds: this.bounds,
       viewport: { width: this.config.worldWidth, height: this.config.worldHeight },
       optimalZoom,

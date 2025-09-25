@@ -5,10 +5,11 @@
 
 import type {
   GameEngineDebugInterface,
-  EmergencyResetResult,
-  isDebugCapableEngine,
-  isValidDebugViewport
+  EmergencyResetResult
 } from '@/types/debug';
+
+// Import the functions (not as type)
+import { isDebugCapableEngine, isValidDebugViewport } from '@/types/debug';
 
 export class EmergencyReset {
   /**

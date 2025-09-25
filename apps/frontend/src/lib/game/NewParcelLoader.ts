@@ -1,9 +1,9 @@
 import type { ParcelInfo } from './generators/CityGenerator';
 import type { District, Parcel } from '@/lib/graphql';
 
-// API configuration for GraphQL - IMPROVED with environment support
+// API configuration for GraphQL - FIXED: correct backend port
 const getGraphQLURL = (): string => {
-  const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+  const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
   return `${backendURL}/graphql`;
 };
 
@@ -18,8 +18,6 @@ export class NewParcelLoader {
     const GRAPHQL_URL = getGraphQLURL();
 
     try {
-      console.log('🏗️ Loading parcels from district system...');
-      console.log(`🔗 Using GraphQL endpoint: ${GRAPHQL_URL}`);
 
       // ✅ First, check if backend is available
       const healthCheck = await this.checkBackendHealth();
@@ -83,7 +81,6 @@ export class NewParcelLoader {
       }
 
       const districts: District[] = data.data.districts || [];
-      console.log(`📊 Loaded ${districts.length} districts from GraphQL`);
 
       // Convert district parcels to game format
       const gameParcels: ParcelInfo[] = [];
@@ -119,12 +116,10 @@ export class NewParcelLoader {
         }
       }
 
-      console.log(`✅ Loaded ${gameParcels.length} parcels from district system`);
       return gameParcels;
 
     } catch (error) {
       console.error('❌ Error loading district parcels:', error);
-      console.log('🔄 Falling back to default parcels...');
       // ✅ Robust fallback to default parcels instead of empty array
       return this.createFallbackParcels();
     }
@@ -135,7 +130,7 @@ export class NewParcelLoader {
    */
   private static async checkBackendHealth(): Promise<boolean> {
     try {
-      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
       // Try a simple GraphQL introspection query with compatible timeout
       const controller = new AbortController();
@@ -156,7 +151,7 @@ export class NewParcelLoader {
 
       return response.ok;
     } catch (error) {
-      console.warn('🔍 Backend health check failed:', error.message);
+      console.warn('🔍 Backend health check failed:', error instanceof Error ? error.message : String(error));
       return false;
     }
   }
@@ -165,7 +160,6 @@ export class NewParcelLoader {
    * Create fallback parcels when backend is unavailable - IMPROVED
    */
   private static createFallbackParcels(): ParcelInfo[] {
-    console.log('🛠️ Creating fallback parcels for development...');
 
     const parcels: ParcelInfo[] = [];
 
@@ -206,7 +200,6 @@ export class NewParcelLoader {
       }
     }
 
-    console.log(`✅ Created ${parcels.length} fallback parcels for development`);
     return parcels;
   }
 

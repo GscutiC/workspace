@@ -51,16 +51,13 @@ export class TileMap {
     this.parcelEventManager = new ParcelEventManager(this.parcelContainer, {
       onParcelHover: (parcel) => {
         if (parcel) {
-          console.log(`🏗️ Hovering over Parcel ${parcel.number} (${parcel.type})`);
         }
       },
       onParcelClick: (parcel) => {
-        console.log(`🖱️ Clicked on Parcel ${parcel.number}:`, parcel);
         // Dispatch custom event for external listeners
         window.dispatchEvent(new CustomEvent('parcelSelected', { detail: parcel }));
       },
       onParcelDoubleClick: (parcel) => {
-        console.log(`🖱️🖱️ Double-clicked on Parcel ${parcel.number}:`, parcel);
         // Dispatch custom event for parcel activation
         window.dispatchEvent(new CustomEvent('parcelActivated', { detail: parcel }));
       }
@@ -75,7 +72,6 @@ export class TileMap {
    */
   private initializeWalkableAreas(): void {
     if (!this.mapData.walkableAreas || this.mapData.walkableAreas.length === 0) {
-      console.log('🚀 Initializing walkableAreas array...');
       this.mapData.walkableAreas = [];
       
       for (let y = 0; y < this.mapData.height; y++) {
@@ -86,7 +82,6 @@ export class TileMap {
         }
       }
       
-      console.log(`✅ Initialized walkableAreas: ${this.mapData.width}x${this.mapData.height}`);
     }
   }
 
@@ -138,8 +133,6 @@ export class TileMap {
         this.renderDebugInfo();
       }
       
-      console.log(`🗺️ Map regenerated with preset: ${presetName}`);
-      console.log(`📦 Loaded ${this.parcels.length} parcels:`, this.parcels.map(p => `Parcela ${p.number} (${p.type})`));
     } catch (error) {
       console.error('❌ Failed to regenerate map:', error);
       // Fallback to default map
@@ -199,7 +192,6 @@ export class TileMap {
       this.renderParcelOutlines();
     }
     
-    console.log(`📦 Parcel visibility: ${this.showParcels ? 'ON' : 'OFF'}`);
   }
 
   /**
@@ -220,7 +212,6 @@ export class TileMap {
       this.parcelEventManager.registerParcel(parcel, parcelSprite.name);
     });
 
-    console.log(`🎨 Rendered ${this.parcels.length} parcel outlines with optimized events`);
   }
 
   /**
@@ -352,10 +343,6 @@ export class TileMap {
       }
     }
     
-    console.log('🗺️ Map generated with tile types:', tileTypeCounts);
-    console.log('🏢 Total obstacles:', obstacles.size);
-    console.log('📐 Map dimensions:', MAP_WIDTH, 'x', MAP_HEIGHT);
-    console.log('🎯 Tiles array length:', tiles.length, 'x', tiles[0]?.length);
 
     return {
       width: MAP_WIDTH,
@@ -432,12 +419,10 @@ export class TileMap {
     this.tileContainer.addChildAt(background, 0); // Add as first child (behind tiles)
     this.tileContainer.addChild(border);
     
-    console.log(`🔲 Map border rendered: ${mapWorldWidth}x${mapWorldHeight} pixels`);
   }  /**
    * Render all tiles
    */
   private renderTiles(): void {
-    console.log('🎨 Starting tile rendering...');
     let renderedCount = 0;
     
     for (let y = 0; y < this.mapData.height; y++) {
@@ -448,9 +433,6 @@ export class TileMap {
       }
     }
     
-    console.log(`🎨 Rendered ${renderedCount} tiles`);
-    console.log(`📦 Tile container children: ${this.tileContainer.children.length}`);
-    console.log(`🧱 Collision container children: ${this.collisionContainer.children.length}`);
   }
 
   /**
@@ -505,7 +487,6 @@ export class TileMap {
 
     // Debug logging for first few tiles
     if (tile.x < 3 && tile.y < 3) {
-      console.log(`🎨 Creating tile at (${tile.x}, ${tile.y}) type: ${tile.type}, color: 0x${properties.color.toString(16)}`);
     }
 
     return graphics;

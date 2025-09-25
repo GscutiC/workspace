@@ -10,11 +10,14 @@ import { RealParcelManager } from '@/components/RealParcelManager';
 import { ParcelInfoPanel } from '@/components/ParcelInfoPanel';
 import { CurrentParcelInfo } from '@/components/CurrentParcelInfo';
 import { ParcelAdminPanel } from '@/components/ParcelAdminPanel';
-import { DistrictOverlay } from '@/components/DistrictOverlay';
 import { DistrictNavigator } from '@/components/DistrictNavigator';
+import { DistrictStatusIndicator } from '@/components/DistrictStatusIndicator';
+import { useDistrictSystem } from '@/hooks/useDistrictSystem';
+import { useDistricts } from '@/hooks/useDistricts';
 import { ParcelInfo } from '@/lib/game/generators/CityGenerator';
-import { AvatarDebug } from '@/lib/debug/avatarDebug';
-import { EmergencyReset } from '@/lib/debug/emergencyReset';
+import { logInfo, logDebug, LogCategory } from '@/lib/utils/logger';
+import type { GameEngineInterface } from '@/types/components';
+import type { District } from '@/lib/graphql';
 import type { AvatarData } from '@/types/game';
 import { UserStatus } from '@/types/game';
 
@@ -36,8 +39,6 @@ interface ParcelData extends ParcelInfo {
  * - Performance optimizations with object pooling and culling
  */
 export function VirtualOffice() {
-  const router = useRouter();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameEngineRef = useRef<GameEngine | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportResizeManagerRef = useRef<ViewportResizeManager | null>(null);
@@ -55,9 +56,7 @@ export function VirtualOffice() {
   const [currentUserId] = useState<string>(() => user?.id || `user-${Date.now()}`);
 
   // Parcel management state
-  const [showParcelManager, setShowParcelManager] = useState(false);
   const [selectedParcel, setSelectedParcel] = useState<ParcelData | null>(null);
-  const [parcels, setParcels] = useState<ParcelInfo[]>([]);
   const [showParcelInfo, setShowParcelInfo] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
@@ -65,6 +64,78 @@ export function VirtualOffice() {
   const [showDistrictOverlay, setShowDistrictOverlay] = useState(true); // Activado por defecto
   const [showDistrictNavigator, setShowDistrictNavigator] = useState(false);
   const [selectedDistrictId, setSelectedDistrictId] = useState<string | undefined>();
+
+  // District system state
+  const [districtSystemReady, setDistrictSystemReady] = useState(false);
+  
+  // Load district data
+  const { data: districts, isLoading: districtsLoading } = useDistricts();
+  
+  // Initialize district system AFTER game engine is ready
+  const districtSystem = useDistrictSystem(
+    isInitialized && gameEngineRef.current ? gameEngineRef.current.getApp() : null,
+    isInitialized && gameEngineRef.current ? gameEngineRef.current.getWorldContainer() : null,
+    {
+      enabled: isInitialized && !!gameEngineRef.current,
+      showLabels: true,
+      showBorders: true,
+      opacity: 0.2,
+      interactive: true,
+      onDistrictClick: (district) => {
+        logInfo(LogCategory.DISTRICTS, 'District clicked', { district: district.zoneCode });
+        setSelectedDistrictId(district.id);
+        handleDistrictNavigate(district.bounds);
+      },
+      onDistrictHover: (district) => {
+        logDebug(LogCategory.DISTRICTS, 'District hovered', { district: district.zoneCode });
+      }
+    }
+  );
+
+  // Set up avatar tracking for district detection
+  useEffect(() => {
+    if (!districtSystem.districtSystem || !gameEngineRef.current || !currentUserId) {
+      return;
+    }
+
+    const ds = districtSystem.districtSystem;
+
+    // Start tracking the current user's avatar
+    ds.startTrackingAvatar(currentUserId);
+    logInfo(LogCategory.DISTRICTS, 'Started tracking avatar for district detection', { avatarId: currentUserId });
+
+    // Set up district change event listener
+    const handleDistrictChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ current: District | null; previous: District | null }>;
+      const { current, previous } = customEvent.detail;
+
+      setSelectedDistrictId(current?.id);
+
+      logInfo(LogCategory.DISTRICTS, 'Avatar district changed', {
+        previous: previous?.zoneCode || 'none',
+        current: current?.zoneCode || 'none',
+        currentName: current?.name || 'Outside districts'
+      });
+
+      // You could add a toast notification here or update UI state
+      if (current) {
+        // TODO: Show district notification or update UI
+        console.log(`🏙️ Entered district: ${current.name} (${current.zoneCode})`);
+      } else if (previous) {
+        console.log(`🚶 Left district: ${previous.name} (${previous.zoneCode})`);
+      }
+    };
+
+    window.addEventListener('districtchange', handleDistrictChange);
+
+    return () => {
+      // Clean up
+      window.removeEventListener('districtchange', handleDistrictChange);
+      ds.stopTrackingAvatar();
+      logDebug(LogCategory.DISTRICTS, 'Cleaned up district tracking');
+    };
+  }, [districtSystem.districtSystem, currentUserId, isInitialized]);
+
   /**
    * Add a real user to the virtual office (would be called via WebSocket)
    */
@@ -140,10 +211,10 @@ export function VirtualOffice() {
         gameEngineRef.current.getViewport()?.moveTo(currentUser.position, true);
         console.log('✅ Centered on avatar at:', currentUser.position);
         
-        // Run debug to ensure avatar is visible
+        // Center camera on avatar
         setTimeout(() => {
           if (gameEngineRef.current) {
-            AvatarDebug.forceAvatarVisible(gameEngineRef.current);
+            console.log('📷 Ensuring camera is centered on avatar');
           }
         }, 100);
       } else {
@@ -161,32 +232,7 @@ export function VirtualOffice() {
     }
   }, []);
 
-  /**
-   * Toggle debug overlay and run avatar visibility analysis
-   */
-  const toggleDebug = useCallback(() => {
-    console.log('🔍 toggleDebug clicked');
-    if (gameEngineRef.current) {
-      console.log('🔍 Running debug analysis...');
-      AvatarDebug.debugAvatarVisibility(gameEngineRef.current);
-      AvatarDebug.debugViewport(gameEngineRef.current);
-      AvatarDebug.forceAvatarVisible(gameEngineRef.current);
-      
-      // Also toggle game debug mode if it exists
-      try {
-        if (typeof gameEngineRef.current.toggleDebugMode === 'function') {
-          gameEngineRef.current.toggleDebugMode();
-          console.log('✅ Debug mode toggled');
-        } else {
-          console.warn('⚠️ toggleDebugMode method not found');
-        }
-      } catch (error) {
-        console.error('❌ Error toggling debug mode:', error);
-      }
-    } else {
-      console.error('❌ GameEngine not available for toggleDebug');
-    }
-  }, []);
+
 
   /**
    * Toggle parcel numbering overlay
@@ -235,9 +281,6 @@ export function VirtualOffice() {
    * Handle parcel update
    */
   const handleParcelUpdate = useCallback((updatedParcel: ParcelData) => {
-    setParcels(prev => 
-      prev.map(p => p.number === updatedParcel.number ? updatedParcel : p)
-    );
     setSelectedParcel(updatedParcel);
   }, []);
 
@@ -269,9 +312,17 @@ export function VirtualOffice() {
    * Toggle district overlay visibility
    */
   const toggleDistrictOverlay = useCallback(() => {
-    setShowDistrictOverlay(!showDistrictOverlay);
-    console.log('🏢 District overlay toggled to:', !showDistrictOverlay);
-  }, [showDistrictOverlay]);
+    const newValue = !showDistrictOverlay;
+    setShowDistrictOverlay(newValue);
+    
+    // Use integrated district system
+    if (districtSystem.isReady) {
+      districtSystem.setVisible(newValue);
+      console.log('🏢 Integrated district system toggled to:', newValue);
+    }
+    
+    console.log('🏢 District overlay toggled to:', newValue);
+  }, [showDistrictOverlay, districtSystem]);
 
   /**
    * Toggle district navigator panel
@@ -295,23 +346,13 @@ export function VirtualOffice() {
    * Initialize the game engine - IMPROVED with better condition checking
    */
   useEffect(() => {
-    // ✅ FIXED: More lenient conditions for initialization
-    console.log('🔍 Checking initialization conditions:', {
-      userLoaded,
-      hasAvatarConfig: !!avatarConfig,
-      isInitialized,
-      hasGameEngine: !!gameEngineRef.current
-    });
-
-    // Don't require userLoaded - proceed with default user if needed
+    // Check initialization conditions
     if (!avatarConfig) {
-      console.log('⚠️ Waiting for avatar config...');
       return;
     }
 
     // Prevent re-initialization if GameEngine already exists
     if (gameEngineRef.current || isInitialized) {
-      console.log('⚠️ Game already initialized, skipping');
       return;
     }
 
@@ -328,9 +369,7 @@ export function VirtualOffice() {
         const canvas = document.createElement('canvas');
         containerRef.current.appendChild(canvas);
 
-        console.log('🎮 Initializing game engine...');
         await gameEngine.init(canvas);
-        
         gameEngineRef.current = gameEngine;
 
         // Add current user avatar with better fallbacks
@@ -342,8 +381,6 @@ export function VirtualOffice() {
           color: avatarConfig.color || 0x4287f5,
           status: UserStatus.AVAILABLE
         };
-
-        console.log('👤 Adding current user:', currentUserData);
         const fullCurrentUserData = gameEngine.addUser(currentUserData);
         setConnectedUsers([fullCurrentUserData]);
 
@@ -361,140 +398,26 @@ export function VirtualOffice() {
 
         // Initialize viewport resize manager
         if (containerRef.current) {
-          console.log('🔧 Initializing ViewportResizeManager...');
           const resizeManager = new ViewportResizeManager(gameEngine, containerRef.current);
           viewportResizeManagerRef.current = resizeManager;
-          console.log('✅ ViewportResizeManager initialized');
         }
 
-        // Debug avatar visibility after initialization
+        // Initialize viewport after game setup
         setTimeout(() => {
           if (gameEngineRef.current) {
-            console.log('🔍 Running avatar visibility debug...');
-            
-            // Force viewport to visible state first
             const viewport = gameEngineRef.current.getViewport();
             if (viewport) {
-              console.log('📷 Setting initial viewport state...');
-              viewport.setZoom(0.5); // Zoom out to see more
-              viewport.moveTo({ x: 3200, y: 2400 }, true); // Center on spawn
-              console.log('� Initial viewport configured');
+              viewport.setZoom(0.5);
+              viewport.moveTo({ x: 3200, y: 2400 }, true);
             }
-            
-            if (gameEngineRef.current) {
-              AvatarDebug.debugAvatarVisibility(gameEngineRef.current);
-              AvatarDebug.debugViewport(gameEngineRef.current);
-            }
-            
-            // Force avatar to be visible for debugging
-            console.log('🔧 Attempting to force avatar visibility...');
-            if (gameEngineRef.current) {
-              AvatarDebug.forceAvatarVisible(gameEngineRef.current);
-            }
-
-            // Make debug available globally
-            window.gameEngine = gameEngineRef.current;
-            window.debugAvatar = () => gameEngineRef.current ? AvatarDebug.debugAvatarVisibility(gameEngineRef.current) : { found: false, visible: false, position: { x: 0, y: 0 }, issues: ['Game engine not available'], fixes: [] };
-            window.forceVisible = () => gameEngineRef.current ? AvatarDebug.forceAvatarVisible(gameEngineRef.current) : false;
-            window.centerCamera = () => {
-              const viewport = gameEngineRef.current?.getViewport();
-              if (viewport) {
-                viewport.moveTo({ x: 3200, y: 2400 }, true);
-                console.log('📷 Camera manually centered');
-              }
-            };
-            window.fixEverything = () => gameEngineRef.current ? EmergencyReset.fixEverything(gameEngineRef.current) : { success: false, actions: [], errors: ['Game engine not available'] };
-            window.quickFix = () => gameEngineRef.current ? EmergencyReset.quickFix(gameEngineRef.current) : { success: false, actions: [], errors: ['Game engine not available'] };
-            window.showStats = () => gameEngineRef.current ? EmergencyReset.showWorldStats(gameEngineRef.current) : undefined;
-
-            // 🎯 NEW: Teleport to parcel zone
-            window.teleportToParcels = () => {
-              console.log('🚀 Teleporting avatar to parcel zone...');
-              if (gameEngineRef.current && gameEngineRef.current.getCurrentUser()) {
-                const user = gameEngineRef.current.getCurrentUser();
-                if (user) {
-                  // Move to center of parcel zone: x(2800-3120), y(2200-2456)
-                  const parcelCenterX = (2800 + 3120) / 2; // 2960
-                  const parcelCenterY = (2200 + 2456) / 2; // 2328
-                  
-                  console.log(`📍 Teleporting to parcel center: (${parcelCenterX}, ${parcelCenterY})`);
-                  
-                  // Update avatar position directly in game state
-                  const avatars = gameEngineRef.current.gameState.avatars;
-                  const avatar = avatars.find(a => a.id === user.id);
-                  if (avatar) {
-                    avatar.x = parcelCenterX;
-                    avatar.y = parcelCenterY;
-                    avatar.targetX = parcelCenterX;
-                    avatar.targetY = parcelCenterY;
-                    console.log(`✅ Avatar ${avatar.name} teleported to (${parcelCenterX}, ${parcelCenterY})`);
-                    
-                    // Center camera on new position
-                    const viewport = gameEngineRef.current.getViewport();
-                    if (viewport) {
-                      viewport.moveTo({ x: parcelCenterX, y: parcelCenterY }, true);
-                    }
-                    
-                    // Force a parcel check after teleport
-                    setTimeout(() => {
-                      const currentParcel = gameEngineRef.current?.getCurrentUserParcel();
-                      console.log('🏠 Current parcel after teleport:', currentParcel);
-                    }, 500);
-                  }
-                }
-              }
-            };
-
-            window.getCurrentParcel = () => {
-              const parcel = gameEngineRef.current?.getCurrentUserParcel();
-              console.log('📍 Current parcel:', parcel);
-              return parcel;
-            };
-            window.getParcelAt = (x: number, y: number) => {
-              const parcel = gameEngineRef.current?.getParcelAtPosition(x, y);
-              console.log(`📍 Parcel at (${x}, ${y}):`, parcel);
-              return parcel;
-            };
-            window.getAllParcels = () => {
-              const parcels = gameEngineRef.current?.getAllParcels();
-              console.log('📍 All parcels:', parcels);
-              return parcels;
-            };
-            window.debugParcelMigration = () => {
-              const report = gameEngineRef.current?.debugParcelMigration();
-              console.log('🔄 Parcel migration debug:', report);
-              return report;
-            };
-            window.onMouseParcel = (event: MouseEvent) => {
-              const rect = (event.target as HTMLElement).getBoundingClientRect();
-              const x = event.clientX - rect.left;
-              const y = event.clientY - rect.top;
-              const parcel = gameEngineRef.current?.getParcelAtScreenPosition(x, y);
-              console.log(`🖱️ Mouse parcel at screen (${x}, ${y}):`, parcel);
-              return parcel;
-            };
-            
-            console.log('🎮 Game engine available as window.gameEngine');
-            console.log('🔍 Debug functions available:');
-            console.log('  - window.debugAvatar() - Debug avatar state');
-            console.log('  - window.forceVisible() - Force avatar visible');
-            console.log('  - window.centerCamera() - Center camera');
-            console.log('  - window.fixEverything() - 🚨 EMERGENCY RESET');
-            console.log('  - window.quickFix() - ⚡ Quick zoom fix');
-            console.log('  - window.showStats() - 📊 Show world stats');
-            console.log('  - window.teleportToParcels() - 🚀 Teleport to parcel zone');
-            console.log('📍 Parcel functions available:');
-            console.log('  - window.getCurrentParcel() - Get current user parcel');
-            console.log('  - window.getParcelAt(x, y) - Get parcel at coordinates');
-            console.log('  - window.getAllParcels() - List all parcels');
-            console.log('  - window.debugParcelMigration() - 🔄 Debug parcel migration status');
-            console.log('  - window.onMouseParcel(event) - Get parcel under mouse');
           }
         }, 1000);
       } catch (error) {
         console.error('❌ Failed to initialize game:', error);
-        console.error('❌ Error details:', error.message);
-        console.error('❌ Stack trace:', error.stack);
+        if (error instanceof Error) {
+          console.error('❌ Error details:', error.message);
+          console.error('❌ Stack trace:', error.stack);
+        }
 
         // ✅ IMPROVED: Better error recovery
         setIsLoaded(true); // Still set to loaded to prevent infinite loading
@@ -514,32 +437,46 @@ export function VirtualOffice() {
       }
     };
 
-    console.log('🚀 Starting game initialization...');
     initializeGame();
 
     // Cleanup function - ONLY clean up when component unmounts, not on re-renders
     return () => {
-      console.log('🧹 Cleaning up game engine...');
-      
       // Cleanup ViewportResizeManager
       if (viewportResizeManagerRef.current) {
         viewportResizeManagerRef.current.destroy();
         viewportResizeManagerRef.current = null;
-        console.log('🧹 ViewportResizeManager cleaned up');
       }
       
       if (gameEngineRef.current) {
         // Don't set to null immediately - check if we're actually unmounting
         const shouldCleanup = !containerRef.current || !containerRef.current.isConnected;
         if (shouldCleanup) {
-          console.log('🧹 Game engine cleaned up');
           gameEngineRef.current = null;
-        } else {
-          console.log('🔄 Skipping cleanup - component still mounted');
         }
       }
     };
   }, [avatarConfig, isInitialized, user, currentUserId]); // ✅ Removed userLoaded dependency for faster initialization
+
+  // Effect to handle district system visibility
+  useEffect(() => {
+    if (districtSystem?.isReady && isInitialized) {
+      districtSystem.setVisible(showDistrictOverlay);
+    }
+  }, [districtSystem, showDistrictOverlay, isInitialized]);
+
+  // Effect to render districts on minimap
+  useEffect(() => {
+    if (gameEngineRef.current && districts && districts.length > 0 && isInitialized) {
+      try {
+        const minimapSystem = gameEngineRef.current.getMinimapSystem?.();
+        if (minimapSystem && minimapSystem.renderDistricts) {
+          minimapSystem.renderDistricts(districts);
+        }
+      } catch (error) {
+        console.error('❌ Error rendering districts on minimap:', error);
+      }
+    }
+  }, [districts, isInitialized]);
 
   /**
    * Handle canvas resize
@@ -549,7 +486,6 @@ export function VirtualOffice() {
 
     const handleResize = () => {
       if (gameEngineRef.current && containerRef.current) {
-        console.log('📏 Resizing game canvas...');
         const { clientWidth, clientHeight } = containerRef.current;
         gameEngineRef.current.resize(clientWidth, clientHeight);
       }
@@ -644,6 +580,14 @@ export function VirtualOffice() {
     };
   }, [isInitialized, connectedUsers, currentUserId]);
 
+  // Sync district system visibility with state
+  useEffect(() => {
+    if (districtSystem.isReady) {
+      districtSystem.setVisible(showDistrictOverlay);
+      console.log('🏢 District system visibility synced:', showDistrictOverlay);
+    }
+  }, [showDistrictOverlay, districtSystem.isReady]);
+
   /**
    * Move to specific position (for testing)
    */
@@ -708,7 +652,7 @@ export function VirtualOffice() {
       {/* Current Parcel Info - Always visible in top left */}
       {isInitialized && gameEngineRef.current && (
         <CurrentParcelInfo 
-          gameEngine={gameEngineRef.current as any}
+          gameEngine={gameEngineRef.current as unknown as GameEngineInterface}
           currentUserId={currentUserId}
         />
       )}
@@ -724,12 +668,7 @@ export function VirtualOffice() {
               >
                 Find Avatar
               </button>
-              <button
-                onClick={toggleDebug}
-                className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"
-              >
-                Debug
-              </button>
+
               <button
                 onClick={toggleParcels}
                 className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
@@ -767,12 +706,7 @@ export function VirtualOffice() {
         </div>
       )}
 
-      {/* Parcel Management Panel */}
-      {showParcelManager && (
-        <div className="absolute top-0 left-0 w-2/3 h-full z-20 bg-white shadow-xl overflow-y-auto">
-          <RealParcelManager />
-        </div>
-      )}
+
 
       {/* Parcel Information Panel */}
       {showParcelInfo && selectedParcel && (
@@ -799,7 +733,7 @@ export function VirtualOffice() {
                 </button>
               </div>
               <ParcelAdminPanel 
-                gameEngine={gameEngineRef.current}
+                gameEngine={gameEngineRef.current as GameEngineInterface | null}
                 onClose={() => setShowAdminPanel(false)}
               />
             </div>
@@ -807,17 +741,8 @@ export function VirtualOffice() {
         </div>
       )}
 
-      {/* District Overlay */}
-      {showDistrictOverlay && (
-        <DistrictOverlay 
-          app={gameEngineRef.current?.getApp() || null}
-          showOverlay={showDistrictOverlay}
-          selectedDistrictId={selectedDistrictId}
-          onDistrictClick={handleDistrictSelect}
-          enableMinimapView={true}
-          minimapScale={0.15}
-        />
-      )}
+      {/* District Overlay - Now using integrated DistrictSystem */}
+      {/* District overlay is now handled by the integrated DistrictSystem */}
 
       {/* District Navigator */}
       {showDistrictNavigator && (
@@ -835,6 +760,9 @@ export function VirtualOffice() {
           </button>
         </div>
       )}
+
+      {/* District Status Indicator for debugging */}
+      <DistrictStatusIndicator />
     </div>
   );
 }

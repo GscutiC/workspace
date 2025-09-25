@@ -2,9 +2,14 @@
   "name": "nexus-workspace",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "pnpm -r run dev",
+    "dev": "concurrently \"pnpm -F backend run dev\" \"pnpm -F frontend run dev\" --names \"backend,frontend\" --prefix-colors \"blue,green\"",
+    "dev:backend": "pnpm -F backend run dev",
+    "dev:frontend": "pnpm -F frontend run dev",
     "build": "pnpm -r run build",
     "start": "pnpm -r run start",
     "lint": "pnpm -r run lint",
@@ -12,5 +17,8 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }

@@ -15,42 +15,36 @@ export class AvatarAnimationSystem {
    * Create animated sprite for avatar
    */
   public createAnimatedAvatar(avatar: AvatarData): AnimatedSprite {
-    console.log('🎭 AvatarAnimationSystem.createAnimatedAvatar for:', avatar.id);
+      // Animation log removed
     
     try {
-      console.log('🖼️ Getting avatar textures...');
+      // Animation log removed
       const textures = this.getAvatarTextures(avatar);
-      console.log('✅ Got textures:', textures.length);
+      // Animation log removed
       
-      console.log('🎬 Creating AnimatedSprite...');
+      // Animation log removed
       const animatedSprite = new AnimatedSprite(textures);
 
       // Configure animation
       animatedSprite.animationSpeed = AVATAR_CONFIG.animationSpeed;
       animatedSprite.loop = true;
       animatedSprite.anchor.set(0.5, 1); // Center-bottom anchor
-      
-      console.log('⚙️ AnimatedSprite configured:', {
-        animationSpeed: animatedSprite.animationSpeed,
-        anchor: animatedSprite.anchor,
-        totalFrames: animatedSprite.totalFrames
-      });
 
       // Set initial position and direction
       animatedSprite.x = avatar.position.x;
       animatedSprite.y = avatar.position.y;
-      console.log('📍 Sprite positioned at:', { x: animatedSprite.x, y: animatedSprite.y });
+      // Animation log removed
 
       // Store reference
       this.animatedSprites.set(avatar.id, animatedSprite);
-      console.log('💾 Sprite stored with ID:', avatar.id);
+      // Animation log removed
 
       // Set initial animation based on direction
-      console.log('🎯 Setting initial animation...');
+      // Animation log removed
       this.updateAnimation(avatar.id, avatar.direction, false);
-      console.log('✅ Initial animation set');
+      // Animation log removed
 
-      console.log('🎉 AnimatedSprite creation completed for:', avatar.id);
+      // Animation log removed
       return animatedSprite;
       
     } catch (error) {
@@ -86,20 +80,20 @@ export class AvatarAnimationSystem {
    * Get textures for avatar (creates placeholder colored rectangles for now)
    */
   private getAvatarTextures(avatar: AvatarData): Texture[] {
-    console.log('🖼️ Getting avatar textures for:', avatar.id, 'color:', avatar.color);
+      // Animation log removed
     
     const cacheKey = `${avatar.avatar}_${avatar.color}`;
     
     if (AvatarAnimationSystem.textureCache.has(cacheKey)) {
-      console.log('💾 Using cached textures for:', cacheKey);
+      // Animation log removed
       return AvatarAnimationSystem.textureCache.get(cacheKey)!;
     }
 
-    console.log('🎨 Creating new textures for:', cacheKey);
+      // Animation log removed
     const textures = this.createAvatarTextures(avatar);
     AvatarAnimationSystem.textureCache.set(cacheKey, textures);
     
-    console.log('✅ Created', textures.length, 'textures for avatar');
+      // Animation log removed
     return textures;
   }
 

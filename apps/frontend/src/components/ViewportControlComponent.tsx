@@ -25,7 +25,7 @@ export function ViewportControlComponent() {
 
   const handleZoomIn = () => {
     if (gameEngineRef.current) {
-      const viewport = (gameEngineRef.current as any).viewport;
+      const viewport = gameEngineRef.current.getViewport();
       if (viewport) {
         const currentZoom = viewport.getState().zoom;
         viewport.setZoom(currentZoom * 1.2);
@@ -35,7 +35,7 @@ export function ViewportControlComponent() {
 
   const handleZoomOut = () => {
     if (gameEngineRef.current) {
-      const viewport = (gameEngineRef.current as any).viewport;
+      const viewport = gameEngineRef.current.getViewport();
       if (viewport) {
         const currentZoom = viewport.getState().zoom;
         viewport.setZoom(currentZoom * 0.8);
@@ -113,8 +113,8 @@ export function ViewportControlComponent() {
       <div className="text-xs text-gray-600 mt-3 space-y-1">
         <div>🖱️ Arrastra para mover la cámara</div>
         <div>🎯 Usa estos controles para mejor navegación</div>
-        <div>📏 "Ajustar" muestra todo el mapa</div>
-        <div>🎯 "Centrar" optimiza la vista</div>
+        <div>📏 &quot;Ajustar&quot; muestra todo el mapa</div>
+        <div>🎯 &quot;Centrar&quot; optimiza la vista</div>
       </div>
     </div>
   );

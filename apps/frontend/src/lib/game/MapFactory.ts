@@ -51,7 +51,6 @@ export class MapFactory {
     // Load parcels from District system only
     let parcels: ParcelInfo[];
     try {
-      console.log('🏗️ Loading parcels from District system...');
       parcels = await NewParcelLoader.loadDistrictParcels();
       
       if (parcels.length === 0) {
@@ -60,12 +59,10 @@ export class MapFactory {
       }
     } catch (error) {
       console.error('❌ Failed to load district parcels:', error);
-      console.log('🔄 Creating default parcels as fallback');
       parcels = this.createDefaultParcels();
     }
 
     // Generate map features in order of dependency
-    console.log(`🏗️ Using ${parcels.length} parcels from district system`);
     
     // Generate basic city structure (streets, buildings) around district parcels
     CityGenerator.generateCityBlocksWithRealParcels(tiles, obstacles, config.city, parcels);
@@ -75,7 +72,6 @@ export class MapFactory {
     
     // Add river and water borders
     RiverGenerator.generateRiver(tiles, obstacles, config.river);
-    console.log('🌊 River/water borders added for natural boundaries');
     
     // Add urban furniture (final details)
     UrbanFurnitureGenerator.addUrbanFurniture(tiles, obstacles, config.furniture);
@@ -90,7 +86,6 @@ export class MapFactory {
       }
     });
 
-    console.log(`✅ Generated map with ${parcels.length} district parcels`);
     return { tiles, obstacles, parcels };
   }
 
@@ -120,7 +115,6 @@ export class MapFactory {
     
     // 3. River (may modify existing tiles) - RESTORED: Natural water borders
     RiverGenerator.generateRiver(tiles, obstacles, config.river);
-    console.log('🌊 River/water borders restored for natural boundaries');
     
     // 4. Urban furniture (final details)
     UrbanFurnitureGenerator.addUrbanFurniture(tiles, obstacles, config.furniture);
@@ -133,7 +127,6 @@ export class MapFactory {
       });
     }
 
-    console.log(`🏗️ Generated ${parcels.length} parcels for map`);
     return { tiles, obstacles, parcels };
   }
 
@@ -248,7 +241,6 @@ export class MapFactory {
       }
     }
     
-    console.log(`🏗️ Created ${parcels.length} default parcels`);
     return parcels;
   }
 }

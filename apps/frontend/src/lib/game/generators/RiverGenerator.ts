@@ -18,12 +18,6 @@ export class RiverGenerator {
     obstacles: Map<string, ObstacleInfo>,
     config: RiverConfig
   ): void {
-    console.log('🌊 Generating river with config:', {
-      width: config.width,
-      curviness: config.curviness,
-      bridgeCount: config.bridgeCount
-    });
-    
     // Primero generar bordes de agua
     this.generateWaterBorders(tiles);
     
@@ -159,7 +153,6 @@ export class RiverGenerator {
    * Generate water borders around the map edges to create natural boundaries
    */
   private static generateWaterBorders(tiles: ExtendedTileData[][]): void {
-    console.log('🌊 Generating water borders around map edges');
     const borderWidth = 3; // Ancho del borde de agua
     
     // Borde superior
@@ -222,6 +215,5 @@ export class RiverGenerator {
       }
     }
     
-    console.log('✅ Water borders generated successfully');
   }
 }

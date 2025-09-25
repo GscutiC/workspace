@@ -11,6 +11,7 @@ import { InputSystem } from './systems/InputSystem';
 import { ObjectPool } from './systems/ObjectPool';
 import { MinimapSystem } from './systems/MinimapSystem';
 import { MovementController } from './controllers/MovementController';
+import { DistrictSystem } from './DistrictSystem';
 import type { ParcelInfo } from './generators/CityGenerator';
 
 // Define interfaces for systems
@@ -33,6 +34,7 @@ export class GameEngine {
   private objectPool!: ObjectPool;
   private minimapSystem!: MinimapSystem;
   private movementController: MovementController | null = null;
+  private districtSystem: DistrictSystem | null = null;
   private isRunning: boolean = false;
   private lastFrameTime: number = 0;
   private cullingEnabled: boolean = true;
@@ -53,32 +55,23 @@ export class GameEngine {
   }
 
   /**
-   * Initialize the game engine with canvas - IMPROVED with detailed logging
+   * Initialize the game engine with canvas
    */
   async init(canvas: HTMLCanvasElement): Promise<void> {
-    console.log('🎮 GameEngine: Starting initialization...');
-    console.log('📋 Canvas element:', canvas ? 'Available' : 'NOT AVAILABLE');
-
     try {
-      console.log('🔧 Step 1: Initializing Pixi.js application...');
       // Initialize Pixi.js first
       await this.initializePixi(canvas);
-      console.log('✅ Step 1 completed: Pixi.js initialized');
-
-      console.log('🔧 Step 2: Setting up layers...');
       // Setup layers after Pixi.js is ready
       this.setupLayers();
-      console.log('✅ Step 2 completed: Layers setup');
 
-      console.log('🔧 Step 3: Initializing game systems...');
       // Initialize systems after canvas is available (now with real parcels)
       await this.initializeSystems();
-      console.log('✅ Step 3 completed: Game systems initialized');
 
-      console.log('✅ GameEngine: Initialization complete');
     } catch (error) {
       console.error('❌ GameEngine initialization failed:', error);
-      console.error('❌ Error stack:', error.stack);
+      if (error instanceof Error) {
+        console.error('❌ Error stack:', error.stack);
+      }
       throw error;
     }
   }
@@ -88,7 +81,6 @@ export class GameEngine {
    */
   private async initializePixi(canvas: HTMLCanvasElement): Promise<void> {
     try {
-      console.log('🎮 Initializing Pixi.js v8 application...');
 
       await this.app.init({
         canvas,
@@ -112,13 +104,12 @@ export class GameEngine {
       // Enable sorting for layers
       this.app.stage.sortableChildren = true;
 
-      console.log('✅ Pixi.js v8 initialized successfully');
-      console.log(`📏 Canvas size: ${GAME_CONFIG.width}x${GAME_CONFIG.height}`);
-      console.log(`🎨 Renderer type: ${this.app.renderer.type}`);
+
 
     } catch (error) {
       console.error('❌ Failed to initialize Pixi.js:', error);
-      throw new Error(`Pixi.js initialization failed: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Pixi.js initialization failed: ${message}`);
     }
   }
 
@@ -163,7 +154,7 @@ export class GameEngine {
 
         this.layers.set(layerType, container);
         // Don't add to stage yet - will be added to world container in initializeSystems
-        console.log(`🎭 Created layer: ${config.name} (z-index: ${config.zIndex})`);
+
       }
     });
   }
@@ -173,11 +164,8 @@ export class GameEngine {
    */
   private async initializeSystems(): Promise<void> {
     try {
-      console.log('🏗️ Step 3a: Loading real parcels from API for map generation...');
       const { tiles, obstacles, parcels } = await MapFactory.generateMapWithRealParcels('default');
-      console.log(`✅ Step 3a completed: Loaded ${parcels.length} parcels, ${tiles.length}x${tiles[0]?.length || 0} tiles, ${obstacles.size} obstacles`);
 
-      console.log('🏗️ Step 3b: Creating TileMap with real parcel data...');
       // Create tile map with real parcel data
       this.tileMap = new TileMap(
       {
@@ -208,14 +196,11 @@ export class GameEngine {
       layer.sortableChildren = true;
       layer.zIndex = layerType; // Use enum values as z-index
       worldContainer.addChild(layer);
-      console.log(`🌍 Added layer ${LayerType[layerType]} to world container with z-index: ${layerType}`);
     });
 
     // Add the world container to the stage with verification
     try {
       this.app.stage.addChild(worldContainer);
-      console.log('✅ World container successfully added to stage');
-      console.log(`📊 Stage children count: ${this.app.stage.children.length}`);
     } catch (error) {
       console.error('❌ Failed to add world container to stage:', error);
       throw error;
@@ -223,27 +208,22 @@ export class GameEngine {
 
     // Create viewport with the world container
     this.viewport = new Viewport(worldContainer, worldBounds);
-    console.log('📷 Viewport created with world container');
     
     // Center the viewport to show the map optimally
     this.viewport.centerOnMap();
-    console.log('🎯 Viewport centered on map for optimal viewing');
 
     // Add tilemap to the floor layer
     const floorLayer = this.layers.get(LayerType.FLOOR)!;
     const tilemapVisuals = this.tileMap.createVisuals();
     floorLayer.addChild(tilemapVisuals);
-    console.log('🗺️ Tilemap added to floor layer');
 
     // Add parcel containers to appropriate layers
     const objectLayer = this.layers.get(LayerType.OBJECTS)!;
     const parcelContainer = this.tileMap.getParcelContainer();
     objectLayer.addChild(parcelContainer);
-    console.log('📦 Parcel container added to objects layer');
 
     // Enable parcel visibility by default
     this.tileMap.toggleParcelVisibility();
-    console.log('✅ Parcels are now visible on the map');
 
     // Initialize object pool
     this.objectPool = new ObjectPool();
@@ -272,13 +252,13 @@ export class GameEngine {
     this.setupInputHandlers();
 
     // Show parcel numbers by default to help with identification
-    console.log('🏗️ Enabling parcel numbers by default for better navigation');
     this.tileMap.toggleParcelVisibility();
 
-    console.log('✅ All game systems initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize game systems:', error);
-      console.error('❌ Error in initializeSystems:', error.stack);
+      if (error instanceof Error) {
+        console.error('❌ Error in initializeSystems:', error.stack);
+      }
       throw error;
     }
   }
@@ -291,7 +271,6 @@ export class GameEngine {
     this.minimapSystem.setAvatarMoveHandler((worldPosition: Position) => {
       if (!this.gameState.currentUser) return;
       
-      console.log('🗺️ Moving avatar via minimap to:', worldPosition);
       
       // Use MovementController for avatar movement
       if (this.movementController) {
@@ -301,7 +280,6 @@ export class GameEngine {
 
     // Right click: Move camera
     this.minimapSystem.setCameraMoveHandler((worldPosition: Position) => {
-      console.log('🗺️ Moving camera via minimap to:', worldPosition);
       
       // Move camera to clicked position
       this.viewport.moveTo(worldPosition, true);
@@ -327,7 +305,6 @@ export class GameEngine {
     // Add to stage (not to world container, so it's always visible)
     this.app.stage.addChild(minimapContainer);
     
-    console.log('🗺️ Minimap added to stage at position:', minimapContainer.x, minimapContainer.y);
   }
 
   /**
@@ -353,10 +330,8 @@ export class GameEngine {
 
     // Left click for camera movement (drag map)
     inputSystem.onLeftClick = (position: Position) => {
-      console.log('👆 GameEngine received LEFT click at:', position);
       
       const worldPos = this.viewport.screenToWorld(position);
-      console.log('🎥 Moving camera to world position:', worldPos);
       
       // Move camera to clicked position
       this.viewport.moveTo(worldPos, true);
@@ -364,7 +339,6 @@ export class GameEngine {
 
     // Right click for avatar movement
     inputSystem.onRightClick = (position: Position) => {
-      console.log('🎯 GameEngine received RIGHT click at:', position);
       
       if (!this.gameState.currentUser) {
         console.error('❌ No current user set!');
@@ -376,10 +350,8 @@ export class GameEngine {
         return;
       }
       
-      console.log('👤 Moving avatar for user:', this.gameState.currentUser.id);
 
       const worldPos = this.viewport.screenToWorld(position);
-      console.log('🌍 Avatar moving to world position:', worldPos);
       
       // Use MovementController for avatar movement
       this.movementController.handleMouseMovement(worldPos, this.gameState.currentUser.id);
@@ -387,7 +359,6 @@ export class GameEngine {
 
     // Keep general click handler for backward compatibility
     inputSystem.onMouseClick = (position: Position) => {
-      console.log('🖱️ GameEngine received general mouse click at:', position);
       // General click handling can be added here if needed
     };
 
@@ -427,7 +398,6 @@ export class GameEngine {
     // Emit event for components that need the GameEngine reference
     const gameEngineReadyEvent = new CustomEvent('gameEngineReady', { detail: this });
     window.dispatchEvent(gameEngineReadyEvent);
-    console.log('✅ Game engine initialized and ready event emitted');
     
     // Ensure ticker is started
     if (!this.app.ticker.started) {
@@ -475,7 +445,6 @@ export class GameEngine {
    * Add user to the game
    */
   public addUser(userData: Omit<AvatarData, 'position' | 'direction'>, customPosition?: { x: number; y: number }): AvatarData {
-    console.log(`🧑 Adding user: ${userData.name} (${userData.id})`);
     
     // Use custom position if provided, otherwise find a spawn position
     const spawnPosition = customPosition || this.findSpawnPosition();
@@ -493,7 +462,6 @@ export class GameEngine {
     const renderSystem = this.systems.get('render') as RenderSystem;
     if (renderSystem) {
       renderSystem.createAvatar(avatar);
-      console.log(`✅ User ${userData.name} added successfully at (${spawnPosition.x}, ${spawnPosition.y})`);
     } else {
       console.error('❌ RenderSystem not available!');
     }
@@ -523,16 +491,13 @@ export class GameEngine {
     const avatar = this.gameState.avatars.get(userId);
     if (avatar) {
       this.gameState.currentUser = avatar;
-      console.log(`👤 Current user set: ${avatar.name}`);
       
       // Center camera on user with immediate positioning
-      console.log(`📷 Centering camera on user at (${avatar.position.x}, ${avatar.position.y})`);
       this.viewport.moveTo(avatar.position, true);
       
       // Force viewport to update immediately
       setTimeout(() => {
         this.viewport.moveTo(avatar.position, true);
-        console.log(`📷 Camera forcefully centered on user at (${avatar.position.x}, ${avatar.position.y})`);
       }, 100);
       
     } else {
@@ -541,10 +506,16 @@ export class GameEngine {
   }
 
   /**
+   * Get current user (the player)
+   */
+  public getCurrentUser(): AvatarData | null {
+    return this.gameState.currentUser || null;
+  }
+
+  /**
    * Move avatar to position
    */
   public moveAvatar(userId: string, targetPosition: Position): void {
-    console.log('🎯 Moving avatar', userId, 'to position:', targetPosition);
     
     const avatar = this.gameState.avatars.get(userId);
     if (!avatar) {
@@ -552,12 +523,10 @@ export class GameEngine {
       return;
     }
     
-    console.log('📍 Current avatar position:', avatar.position);
     
     const movementSystem = this.systems.get('movement') as MovementSystem;
     const success = movementSystem.moveToPosition(userId, targetPosition);
     
-    console.log('✅ Movement system response:', success);
   }
 
   /**
@@ -670,14 +639,6 @@ export class GameEngine {
       parcelSummary
     };
     
-    console.log('🔍 PARCEL MIGRATION DEBUG REPORT:');
-    console.log('================================');
-    console.log(`📊 Total parcels: ${result.totalParcels}`);
-    console.log(`🔄 Migrated parcels: ${result.migratedParcels}`);
-    console.log(`📦 Original parcels: ${result.originalParcels}`);
-    console.log(`✅ Valid positions: ${result.validParcels}`);
-    console.log(`❌ Invalid positions: ${result.invalidParcels}`);
-    console.log('📋 Parcel details:', result.parcelSummary);
     
     return result;
   }
@@ -737,11 +698,9 @@ export class GameEngine {
       y: worldBounds.height / 2,
     };
     
-    console.log('🏠 Finding spawn position. Center:', centerPosition, 'world bounds:', worldBounds);
     
     // Check if center is available (walkable and no other avatars)
     if (this.isPositionAvailable(centerPosition)) {
-      console.log('🏠 Using center spawn position:', centerPosition);
       return centerPosition;
     }
     
@@ -756,7 +715,6 @@ export class GameEngine {
       };
 
       if (this.isPositionAvailable(position)) {
-        console.log('🏠 Spawn position found near center:', position);
         return position;
       }
     }
@@ -769,7 +727,6 @@ export class GameEngine {
       };
 
       if (this.isPositionAvailable(position)) {
-        console.log('🏠 Spawn position found with wider search:', position);
         return position;
       }
     }
@@ -797,7 +754,6 @@ export class GameEngine {
       );
       
       if (distance < minDistance) {
-        console.log(`🚫 Position ${position.x},${position.y} too close to avatar ${avatar.id} (distance: ${distance.toFixed(2)})`);
         return false;
       }
     }
@@ -1088,7 +1044,6 @@ export class GameEngine {
     if (renderSystem) {
       renderSystem.setDebugMode(enabled);
     }
-    console.log(`🐛 GameEngine debug mode ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   public toggleCulling(enabled?: boolean): void {
@@ -1131,23 +1086,15 @@ export class GameEngine {
    * Debug method to list all visible elements and their properties
    */
   public debugVisibleElements(): void {
-    console.log('🔍 Debugging visible elements...');
     
     // Check all layers
     this.layers.forEach((layer, layerType) => {
-      console.log(`📚 Layer ${LayerType[layerType]}:`, {
-        children: layer.children.length,
-        visible: layer.visible,
-        alpha: layer.alpha
-      });
-      
       // Recursively check children
       this.debugContainerChildren(layer, `  ${LayerType[layerType]}`);
     });
 
     // Check minimap
     if (this.minimapSystem) {
-      console.log('🗺️ Minimap elements:');
       const minimapContainer = this.minimapSystem.getContainer();
       this.debugContainerChildren(minimapContainer, '  Minimap');
     }
@@ -1172,9 +1119,7 @@ export class GameEngine {
                     child.tint === 0xFFC0CB || child.tint === 0xFF1493;
       
       if (isPink || child.name?.includes('pink') || child.name?.includes('marker')) {
-        console.log(`🎯 POTENTIAL PINK ELEMENT: ${prefix}[${index}]`, info);
       } else if (child.visible && child.alpha > 0) {
-        console.log(`${prefix}[${index}]`, info);
       }
       
       // Recursively check children
@@ -1200,7 +1145,6 @@ export class GameEngine {
       hiddenCount += this.hideElementsInContainer(minimapContainer, pattern);
     }
 
-    console.log(`🙈 Hidden ${hiddenCount} elements matching pattern: "${pattern}"`);
     return hiddenCount;
   }
 
@@ -1216,7 +1160,6 @@ export class GameEngine {
       
       if (name.toLowerCase().includes(pattern.toLowerCase()) || 
           type.toLowerCase().includes(pattern.toLowerCase())) {
-        console.log(`🙈 Hiding element: ${name} (${type})`);
         child.visible = false;
         hiddenCount++;
       }
@@ -1235,7 +1178,6 @@ export class GameEngine {
    */
   public toggleAreaVisualization(show: boolean = true): void {
     this.tileMap.toggleAreaVisualization(show);
-    console.log(`🎨 Area visualization ${show ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -1243,7 +1185,6 @@ export class GameEngine {
    */
   public toggleObstacleVisualization(show: boolean = true): void {
     this.tileMap.visualizeObstacles(show);
-    console.log(`🏢 Obstacle visualization ${show ? 'enabled' : 'disabled'}`);
   }
 
   /**
@@ -1301,6 +1242,9 @@ export class GameEngine {
     this.tileMap.destroy();
     this.viewport.destroy();
     this.objectPool.destroy();
+    
+    // Destroy district system
+    this.destroyDistrictSystem();
 
     // Destroy layers
     this.layers.forEach((layer) => layer.destroy());
@@ -1308,6 +1252,67 @@ export class GameEngine {
 
     // Destroy Pixi.js application
     this.app.destroy(true);
+  }
+
+  /**
+   * Get the world container for external systems
+   */
+  public getWorldContainer(): Container | null {
+    // Find the world container in the stage
+    const worldContainer = this.app.stage.children.find(
+      child => child.name === 'WorldContainer'
+    ) as Container;
+    return worldContainer || null;
+  }
+
+  /**
+   * Initialize or get the district system
+   */
+  public getDistrictSystem(): DistrictSystem | null {
+    return this.districtSystem;
+  }
+
+  /**
+   * Initialize the district system (to be called from React components)
+   */
+  public initializeDistrictSystem(): DistrictSystem | null {
+    const worldContainer = this.getWorldContainer();
+    
+    if (!worldContainer) {
+      console.error('❌ Cannot initialize DistrictSystem: WorldContainer not found');
+      return null;
+    }
+
+    if (this.districtSystem) {
+      return this.districtSystem;
+    }
+
+    
+    try {
+      this.districtSystem = new DistrictSystem({
+        app: this.app,
+        mapContainer: worldContainer,
+        showLabels: true,
+        showBorders: true,
+        opacity: 0.2,
+        interactive: true,
+      });
+      
+      return this.districtSystem;
+    } catch (error) {
+      console.error('❌ Failed to initialize DistrictSystem:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Destroy the district system
+   */
+  public destroyDistrictSystem(): void {
+    if (this.districtSystem) {
+      this.districtSystem.destroy();
+      this.districtSystem = null;
+    }
   }
 
   /**
